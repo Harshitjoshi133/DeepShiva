@@ -1,0 +1,17 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        saffron: '#FF9933',
+        forest: '#228B22',
+        snow: '#FFFFFF',
+      },
+    },
+  },
+  plugins: [],
+}
