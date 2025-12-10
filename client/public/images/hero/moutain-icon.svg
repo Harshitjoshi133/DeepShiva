@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" aria-labelledby="mountainIconTitle">
+  <title id="mountainIconTitle">Minimalist Saffron Mountain Icon</title>
+  <g id="Mountain-Peaks">
+    <path d="M160 250L40 430H280L160 250Z" fill="#E67E22"/>
+    
+    <path d="M352 250L472 430H232L352 250Z" fill="#E67E22"/>
+    
+    <path d="M256 100L410 430H102L256 100Z" fill="#F2994A"/>
+  </g>
+</svg>

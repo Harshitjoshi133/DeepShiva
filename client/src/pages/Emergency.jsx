@@ -1,4 +1,4 @@
-import { Phone, Ambulance, Shield, ChevronDown, ChevronUp } from 'lucide-react'
+import { Phone, Ambulance, Shield, ChevronDown, ChevronUp, AlertTriangle, Lightbulb } from 'lucide-react'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 
@@ -59,14 +59,17 @@ export default function Emergency() {
   const [expandedTip, setExpandedTip] = useState(null)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="card bg-red-50 border-2 border-red-500">
-        <h2 className="text-3xl font-bold text-red-700 mb-4">Emergency SOS</h2>
-        <p className="text-gray-700 mb-6">
+    <div className="max-w-4xl mx-auto space-y-4">
+      <div className="glass-card bg-red-50/80 border-2 border-red-500/30 shadow-2xl">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle size={24} className="text-red-600" />
+          <h2 className="text-2xl font-bold text-red-700">Emergency SOS</h2>
+        </div>
+        <p className="text-gray-700 mb-4">
           In case of emergency, contact these services immediately. Your location will be shared automatically.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {emergencyContacts.map((contact) => {
             const Icon = contact.icon
             return (
@@ -74,11 +77,11 @@ export default function Emergency() {
                 key={contact.name}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className={`${contact.color} text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all`}
+                className={`${contact.color} text-white p-4 rounded-xl shadow-lg hover:shadow-2xl transition-all`}
               >
-                <Icon size={48} className="mx-auto mb-3" />
-                <h3 className="text-xl font-bold mb-2">{contact.name}</h3>
-                <p className="text-3xl font-bold">{contact.number}</p>
+                <Icon size={36} className="mx-auto mb-2" />
+                <h3 className="text-lg font-bold mb-1">{contact.name}</h3>
+                <p className="text-2xl font-bold">{contact.number}</p>
               </motion.button>
             )
           })}
@@ -86,9 +89,12 @@ export default function Emergency() {
       </div>
 
       {/* First Aid Tips */}
-      <div className="card">
-        <h3 className="text-2xl font-bold text-gray-800 mb-4">Offline First Aid Guide</h3>
-        <p className="text-gray-600 mb-6">
+      <div className="glass-card shadow-2xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Lightbulb size={24} className="text-saffron" />
+          <h3 className="text-xl font-bold gradient-text">Offline First Aid Guide</h3>
+        </div>
+        <p className="text-gray-600 mb-4">
           Essential first aid information for common mountain emergencies
         </p>
 
@@ -131,8 +137,11 @@ export default function Emergency() {
       </div>
 
       {/* Important Note */}
-      <div className="card bg-yellow-50 border-2 border-yellow-500">
-        <h4 className="font-bold text-gray-800 mb-2">⚠️ Important</h4>
+      <div className="glass-card bg-yellow-50/80 border-2 border-yellow-500/30">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle size={20} className="text-yellow-600" />
+          <h4 className="font-bold text-gray-800">Important</h4>
+        </div>
         <p className="text-gray-700">
           This guide is for informational purposes only. Always seek professional medical help in emergencies. 
           Keep emergency numbers saved offline in your phone.

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { TrendingUp, Leaf, Car } from 'lucide-react'
+import { TrendingUp, Leaf, Car, Lightbulb } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export default function Dashboard() {
@@ -40,17 +40,17 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <h2 className="text-3xl font-bold text-gray-800">Yatra Dashboard</h2>
+    <div className="max-w-5xl mx-auto space-y-4">
+      <h2 className="text-2xl font-bold text-gray-800">Yatra Dashboard</h2>
 
       {/* Crowd Meter */}
-      <div className="card">
-        <div className="flex items-center gap-3 mb-6">
-          <TrendingUp size={32} className="text-saffron" />
-          <h3 className="text-2xl font-bold text-gray-800">Live Crowd Status</h3>
+      <div className="glass-card shadow-2xl">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp size={24} className="text-saffron" />
+          <h3 className="text-xl font-bold gradient-text">Live Crowd Status</h3>
         </div>
         
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={250}>
           <BarChart data={crowdData}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="shrine" />
@@ -64,30 +64,45 @@ export default function Dashboard() {
           </BarChart>
         </ResponsiveContainer>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-          {crowdData.map((shrine) => (
-            <div key={shrine.shrine} className="text-center p-3 bg-gray-50 rounded-lg">
-              <p className="font-semibold text-gray-800">{shrine.shrine}</p>
-              <p className={`text-sm font-bold ${
-                shrine.status === 'Light' ? 'text-green-600' :
-                shrine.status === 'Moderate' ? 'text-orange-600' :
-                'text-red-600'
-              }`}>
-                {shrine.status}
-              </p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          {crowdData.map((shrine) => {
+            const shrineImages = {
+              'Kedarnath': '/images/shrines/kedarnath.png',
+              'Badrinath': '/images/shrines/badrinath.png', 
+              'Gangotri': '/images/shrines/gangotri.png',
+              'Yamunotri': '/images/shrines/yamontri.png'
+            }
+            return (
+              <div key={shrine.shrine} className="relative text-center p-3 bg-gray-50 rounded-lg overflow-hidden">
+                <img 
+                  src={shrineImages[shrine.shrine]}
+                  alt={shrine.shrine}
+                  className="absolute inset-0 w-full h-full object-cover opacity-20"
+                />
+                <div className="relative z-10">
+                  <p className="font-semibold text-gray-800 text-sm">{shrine.shrine}</p>
+                  <p className={`text-xs font-bold ${
+                    shrine.status === 'Light' ? 'text-green-600' :
+                    shrine.status === 'Moderate' ? 'text-orange-600' :
+                    'text-red-600'
+                  }`}>
+                    {shrine.status}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       {/* Carbon Calculator */}
-      <div className="card">
-        <div className="flex items-center gap-3 mb-6">
-          <Leaf size={32} className="text-forest" />
-          <h3 className="text-2xl font-bold text-gray-800">Carbon Footprint Calculator</h3>
+      <div className="glass-card shadow-2xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Leaf size={24} className="text-forest" />
+          <h3 className="text-xl font-bold gradient-text">Carbon Footprint Calculator</h3>
         </div>
 
-        <form onSubmit={handleCarbonSubmit} className="grid md:grid-cols-3 gap-4 mb-6">
+        <form onSubmit={handleCarbonSubmit} className="grid md:grid-cols-3 gap-3 mb-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Distance (km)
@@ -130,10 +145,10 @@ export default function Dashboard() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-green-100 to-blue-100 p-6 rounded-lg border-2 border-green-500"
+            className="glass-card bg-gradient-to-r from-green-100/80 to-blue-100/80 border-2 border-green-500/30 shadow-xl"
           >
-            <h4 className="text-xl font-bold text-gray-800 mb-4">Your Carbon Impact</h4>
-            <div className="grid md:grid-cols-2 gap-4">
+            <h4 className="text-lg font-bold text-gray-800 mb-3">Your Carbon Impact</h4>
+            <div className="grid md:grid-cols-2 gap-3">
               <div className="bg-white p-4 rounded-lg">
                 <p className="text-sm text-gray-600 mb-1">CO₂ Emissions</p>
                 <p className="text-3xl font-bold text-gray-800">{carbonResult.co2_kg.toFixed(2)} kg</p>
@@ -146,7 +161,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="mt-4 text-sm text-gray-700">
-              💡 Tip: Consider carpooling or using public transport to reduce your carbon footprint!
+              <Lightbulb size={16} className="inline mr-1" /> Tip: Consider carpooling or using public transport to reduce your carbon footprint!
             </p>
           </motion.div>
         )}

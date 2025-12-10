@@ -43,14 +43,14 @@ export default function YogaSentinel() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="card">
-        <h2 className="text-3xl font-bold text-gray-800 mb-6">Yoga Sentinel</h2>
-        <p className="text-gray-600 mb-6">
+    <div className="max-w-4xl mx-auto">
+      <div className="glass-card shadow-2xl">
+        <h2 className="text-2xl font-bold gradient-text mb-4">Yoga Sentinel</h2>
+        <p className="text-gray-600 mb-4">
           Position yourself in front of the camera and click "Analyze Pose" for real-time feedback on your yoga posture.
         </p>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Camera Feed */}
           <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
             {cameraError ? (
@@ -85,7 +85,7 @@ export default function YogaSentinel() {
           </div>
 
           {/* Feedback Panel */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             <button
               onClick={captureAndAnalyze}
               disabled={isAnalyzing || cameraError}
@@ -108,11 +108,11 @@ export default function YogaSentinel() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-6 rounded-lg ${
+                className={`glass-card ${
                   feedback.status === 'Perfect' 
-                    ? 'bg-green-100 border-2 border-green-500' 
-                    : 'bg-orange-100 border-2 border-orange-500'
-                }`}
+                    ? 'bg-green-100/80 border-2 border-green-500/30' 
+                    : 'bg-orange-100/80 border-2 border-orange-500/30'
+                } shadow-xl`}
               >
                 <div className="flex items-start gap-3 mb-4">
                   {feedback.status === 'Perfect' ? (
@@ -144,7 +144,7 @@ export default function YogaSentinel() {
             )}
 
             {/* Tips */}
-            <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+            <div className="glass-card bg-blue-50/80 border-2 border-blue-200/30">
               <h4 className="font-semibold text-gray-800 mb-2">Tips for Best Results:</h4>
               <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                 <li>Ensure good lighting</li>

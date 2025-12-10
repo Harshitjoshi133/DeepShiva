@@ -48,12 +48,12 @@ export default function Chat() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-200px)] flex flex-col">
-      <div className="card flex-1 overflow-hidden flex flex-col mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-4 border-b">Chat with Deep-Shiva</h2>
+    <div className="max-w-4xl mx-auto h-[calc(100vh-180px)] flex flex-col">
+      <div className="glass-card flex-1 overflow-hidden flex flex-col mb-3 shadow-2xl">
+        <h2 className="text-xl font-bold gradient-text mb-3 pb-3 border-b border-white/20">Chat with Deep-Shiva</h2>
         
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+        <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-2">
           <AnimatePresence>
             {messages.map((message, index) => (
               <motion.div
@@ -62,10 +62,10 @@ export default function Chat() {
                 animate={{ opacity: 1, y: 0 }}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`max-w-[80%] rounded-lg p-4 ${
+                <div className={`max-w-[80%] rounded-lg p-3 backdrop-blur-sm ${
                   message.role === 'user' 
-                    ? 'bg-saffron text-white' 
-                    : 'bg-gray-100 text-gray-800'
+                    ? 'bg-gradient-to-r from-saffron to-orange-500 text-white shadow-lg' 
+                    : 'bg-white/80 text-gray-800 border border-white/20 shadow-md'
                 }`}>
                   <ReactMarkdown className="prose prose-sm max-w-none">
                     {message.content}
@@ -81,8 +81,8 @@ export default function Chat() {
               animate={{ opacity: 1 }}
               className="flex justify-start"
             >
-              <div className="bg-gray-100 rounded-lg p-4 flex items-center gap-2">
-                <Loader2 className="animate-spin" size={20} />
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 flex items-center gap-2 border border-white/20 shadow-md">
+                <Loader2 className="animate-spin text-saffron" size={20} />
                 <span className="text-gray-600">Deep-Shiva is thinking...</span>
               </div>
             </motion.div>
@@ -91,18 +91,18 @@ export default function Chat() {
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t">
+        <form onSubmit={handleSubmit} className="flex gap-2 pt-3 border-t">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about temples, routes, weather..."
-            className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-saffron text-lg"
+            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-saffron"
             disabled={isLoading}
           />
           <button
             type="button"
-            className="p-3 bg-forest text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="p-2 bg-forest text-white rounded-lg hover:bg-green-700 transition-colors"
             title="Voice input (coming soon)"
           >
             <Mic size={24} />
@@ -110,7 +110,7 @@ export default function Chat() {
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="p-3 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={24} />
           </button>

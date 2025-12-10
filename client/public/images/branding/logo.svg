@@ -1,0 +1,11 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="paint0_linear" x1="256" y1="100" x2="256" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2994A"/>
+      <stop offset="1" stop-color="#E67E22"/>
+    </linearGradient>
+  </defs>
+  <path d="M256 100L384 352H128L256 100Z" fill="url(#paint0_linear)"/>
+  <path d="M180 250L256 150L332 250H180Z" fill="#FFFFFF" opacity="0.5"/>
+  <text x="256" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="48" fill="#27AE60">Deep-Shiva</text>
+</svg>

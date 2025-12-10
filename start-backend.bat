@@ -14,8 +14,8 @@ if not exist venv (
 echo Activating virtual environment...
 call venv\Scripts\activate
 
-echo Installing dependencies...
-pip install -r requirements.txt
+@REM echo Installing dependencies...
+@REM pip install -r requirements.txt
 
 echo.
 echo ========================================

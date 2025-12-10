@@ -24,18 +24,29 @@ export default function Layout({ children }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50 relative">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-saffron rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-forest rounded-full mix-blend-multiply filter blur-xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        <div className="absolute bottom-0 left-1/2 w-96 h-96 bg-orange-300 rounded-full mix-blend-multiply filter blur-xl animate-pulse" style={{animationDelay: '4s'}}></div>
+      </div>
+      
+      <div className="relative z-10">
       {/* Header */}
-      <header className="bg-white shadow-md sticky top-0 z-40">
+      <header className="glass-nav shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
+              className="lg:hidden p-2 hover:bg-white/20 rounded-lg transition-colors duration-200"
             >
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 className="text-2xl font-bold text-saffron">Deep-Shiva</h1>
+            <div className="flex items-center gap-2">
+              <img src="/images/branding/logo.svg" alt="Deep-Shiva" className="h-6 w-6" />
+              <h1 className="text-xl font-bold gradient-text">Deep-Shiva</h1>
+            </div>
           </div>
           
           <div className="flex items-center gap-2">
@@ -43,7 +54,7 @@ export default function Layout({ children }) {
             <select 
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="bg-transparent border-2 border-forest rounded-lg px-3 py-1 font-semibold text-forest focus:outline-none focus:ring-2 focus:ring-forest"
+              className="bg-white/20 backdrop-blur-sm border-2 border-forest/30 rounded-lg px-3 py-1 font-semibold text-forest focus:outline-none focus:ring-2 focus:ring-forest/50 focus:bg-white/30 transition-all duration-200"
             >
               {Object.entries(languages).map(([code, name]) => (
                 <option key={code} value={code}>{name}</option>
@@ -55,7 +66,7 @@ export default function Layout({ children }) {
 
       <div className="flex">
         {/* Desktop Sidebar */}
-        <aside className="hidden lg:block w-64 bg-white shadow-lg min-h-[calc(100vh-73px)] sticky top-[73px]">
+        <aside className="hidden lg:block w-64 glass-sidebar shadow-xl min-h-[calc(100vh-73px)] sticky top-[73px]">
           <nav className="p-4 space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -64,10 +75,10 @@ export default function Layout({ children }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 ${
                     isActive 
-                      ? 'bg-saffron text-white' 
-                      : 'hover:bg-gray-100 text-gray-700'
+                      ? 'bg-gradient-to-r from-saffron to-orange-500 text-white shadow-lg glow-effect' 
+                      : 'hover:bg-white/30 text-gray-700 hover:shadow-md'
                   }`}
                 >
                   <Icon size={20} />
@@ -113,7 +124,7 @@ export default function Layout({ children }) {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 lg:p-8">
+        <main className="flex-1 p-3 lg:p-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -123,9 +134,10 @@ export default function Layout({ children }) {
           </motion.div>
         </main>
       </div>
+      </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 glass-nav border-t border-white/20 z-40">
         <div className="flex justify-around items-center py-2">
           {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon
@@ -134,8 +146,8 @@ export default function Layout({ children }) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
-                  isActive ? 'text-saffron' : 'text-gray-600'
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all duration-300 ${
+                  isActive ? 'text-saffron scale-110' : 'text-gray-600 hover:text-saffron hover:scale-105'
                 }`}
               >
                 <Icon size={24} />

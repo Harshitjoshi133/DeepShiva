@@ -26,20 +26,20 @@ export default function Culture() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">Culture & Artisan Hub</h2>
+    <div className="max-w-5xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Culture & Artisan Hub</h2>
         <p className="text-gray-600">Support local artisans and discover authentic Uttarakhand crafts</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {products.map((product, index) => (
           <motion.div
             key={product.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="card group cursor-pointer"
+            className="glass-card group cursor-pointer hover:shadow-2xl"
           >
             <div className="relative mb-4 overflow-hidden rounded-lg bg-gray-200 aspect-square">
               <img
@@ -58,12 +58,12 @@ export default function Culture() {
               </button>
             </div>
 
-            <h3 className="text-xl font-bold text-gray-800 mb-2">{product.name}</h3>
-            <p className="text-gray-600 text-sm mb-3">{product.description}</p>
+            <h3 className="text-lg font-bold text-gray-800 mb-1">{product.name}</h3>
+            <p className="text-gray-600 text-sm mb-2">{product.description}</p>
             
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold text-saffron">₹{product.price}</p>
+                <p className="text-xl font-bold text-saffron">₹{product.price}</p>
                 <p className="text-xs text-gray-500">By {product.artisan}</p>
               </div>
               <button className="btn-primary py-2 px-4 text-sm flex items-center gap-2">

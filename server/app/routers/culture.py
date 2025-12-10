@@ -29,15 +29,7 @@ async def get_products():
             "description": "Traditional Kumaoni floor art on canvas, handmade by local artists",
             "price": 1500,
             "artisan": "Meera Devi",
-            "image": "https://placehold.co/400x400/FF9933/FFFFFF?text=Aipan+Art"
-        },
-        {
-            "id": 2,
-            "name": "Woolen Shawl",
-            "description": "Pure wool shawl with traditional Garhwali patterns",
-            "price": 2500,
-            "artisan": "Ram Singh",
-            "image": "https://placehold.co/400x400/228B22/FFFFFF?text=Woolen+Shawl"
+            "image": "/images/products/aipan-art.jpg"
         },
         {
             "id": 3,
@@ -45,7 +37,7 @@ async def get_products():
             "description": "Eco-friendly basket made from Himalayan bamboo",
             "price": 800,
             "artisan": "Kamla Bisht",
-            "image": "https://placehold.co/400x400/FF9933/FFFFFF?text=Ringal+Basket"
+            "image": "/images/products/ringal-basket.png"
         },
         {
             "id": 4,
@@ -53,7 +45,7 @@ async def get_products():
             "description": "Handcrafted copper bottle with traditional engravings",
             "price": 1200,
             "artisan": "Mohan Lal",
-            "image": "https://placehold.co/400x400/228B22/FFFFFF?text=Copper+Bottle"
+            "image": "/images/products/copper-bottle.png"
         },
         {
             "id": 5,
@@ -61,7 +53,7 @@ async def get_products():
             "description": "Pure organic honey from high-altitude flowers",
             "price": 600,
             "artisan": "Uttarakhand Bee Cooperative",
-            "image": "https://placehold.co/400x400/FF9933/FFFFFF?text=Honey"
+            "image": "/images/products/himalayan-honey.png"
         }
     ]
     
