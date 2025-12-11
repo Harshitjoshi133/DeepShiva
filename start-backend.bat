@@ -21,6 +21,8 @@ echo.
 echo ========================================
 echo Backend server starting on port 8000
 echo API Docs: http://localhost:8000/docs
+echo Monitoring: http://localhost:8000/api/v1/monitoring/stats
+echo Log files: logs/ directory
 echo ========================================
 echo.
 

@@ -1,11 +1,17 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 import random
 import base64
 import io
+import time
 from typing import List, Optional
 
+from ..logging_config import get_logger, ErrorTracker, PerformanceLogger
+
 router = APIRouter()
+logger = get_logger("vision")
+error_tracker = ErrorTracker(logger)
+performance_logger = PerformanceLogger(logger)
 
 class VisionRequest(BaseModel):
     image: str = Field(..., description="Base64 encoded image")
@@ -31,7 +37,7 @@ class PoseGuide(BaseModel):
     common_mistakes: List[str]
 
 @router.post("/analyze", response_model=VisionResponse)
-async def analyze_pose(request: VisionRequest):
+async def analyze_pose(request: VisionRequest, http_request: Request):
     """
     Enhanced yoga posture analysis with detailed feedback.
     
@@ -39,14 +45,37 @@ async def analyze_pose(request: VisionRequest):
     TODO: Add pose classification model for different yoga asanas.
     TODO: Implement real-time pose scoring algorithm.
     """
+    start_time = time.time()
+    request_id = getattr(http_request.state, 'request_id', 'unknown')
+    
+    logger.info("Pose analysis request received", extra={
+        "request_id": request_id,
+        "pose_type": request.pose_type,
+        "image_size_bytes": len(request.image)
+    })
     
     # Validate base64 image
     try:
         # Basic validation of base64 image
         image_data = base64.b64decode(request.image)
         if len(image_data) < 1000:  # Too small to be a valid image
+            logger.warning("Image too small", extra={
+                "request_id": request_id,
+                "image_size": len(image_data)
+            })
             raise HTTPException(status_code=400, detail="Invalid or corrupted image data")
-    except Exception:
+        
+        logger.debug("Image validation successful", extra={
+            "request_id": request_id,
+            "decoded_size": len(image_data)
+        })
+        
+    except Exception as e:
+        error_tracker.log_validation_error(e, {
+            "request_id": request_id,
+            "image_length": len(request.image),
+            "pose_type": request.pose_type
+        })
         raise HTTPException(status_code=400, detail="Invalid base64 image format")
     
     # Simulate pose detection and analysis
@@ -180,6 +209,27 @@ async def analyze_pose(request: VisionRequest):
     if response_data["pose_score"] < 80:
         recommendations.insert(0, "Practice basic alignment first")
         recommendations.append("Consider using props for support")
+    
+    # Calculate processing time
+    processing_time = (time.time() - start_time) * 1000
+    
+    # Log successful analysis
+    logger.info("Pose analysis completed", extra={
+        "request_id": request_id,
+        "detected_pose": detected_pose,
+        "pose_score": response_data["pose_score"],
+        "confidence": response_data["confidence"],
+        "processing_time_ms": round(processing_time, 2),
+        "corrections_count": len(response_data["corrections"])
+    })
+    
+    # Log performance metrics
+    performance_logger.log_api_performance(
+        endpoint="/api/v1/vision/analyze",
+        method="POST",
+        duration_ms=processing_time,
+        status_code=200
+    )
     
     return VisionResponse(
         status=response_data["status"],

@@ -1,9 +1,15 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import random
 from datetime import datetime
+
+from ..logging_config import get_logger, ErrorTracker, PerformanceLogger
+
 router = APIRouter()
+logger = get_logger("chat")
+error_tracker = ErrorTracker(logger)
+performance_logger = PerformanceLogger(logger)
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000, description="User message")
@@ -27,7 +33,7 @@ class ConversationHistory(BaseModel):
     last_activity: str
 
 @router.post("/query", response_model=ChatResponse)
-async def chat_query(request: ChatRequest):
+async def chat_query(request: ChatRequest, http_request: Request):
     """
     Enhanced chat endpoint with context-aware responses.
     
@@ -35,8 +41,23 @@ async def chat_query(request: ChatRequest):
     TODO: Integrate VectorDB for RAG-based context retrieval.
     TODO: Add conversation memory and personalization.
     """
+    import time
+    start_time = time.time()
+    request_id = getattr(http_request.state, 'request_id', 'unknown')
+    
+    logger.info("Chat query received", extra={
+        "request_id": request_id,
+        "user_id": request.user_id,
+        "message_length": len(request.message),
+        "language": request.language,
+        "has_context": bool(request.context)
+    })
     
     if not request.message.strip():
+        logger.warning("Empty message received", extra={
+            "request_id": request_id,
+            "user_id": request.user_id
+        })
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     # Analyze message for intent and keywords
@@ -135,6 +156,28 @@ async def chat_query(request: ChatRequest):
     
     # Generate unique message ID
     message_id = f"msg_{random.randint(100000, 999999)}"
+    
+    # Calculate processing time
+    processing_time = (time.time() - start_time) * 1000
+    
+    # Log successful response
+    logger.info("Chat query processed successfully", extra={
+        "request_id": request_id,
+        "user_id": request.user_id,
+        "message_id": message_id,
+        "matched_topic": matched_topic,
+        "processing_time_ms": round(processing_time, 2),
+        "response_length": len(response)
+    })
+    
+    # Log performance if slow
+    if processing_time > 1000:  # Log if over 1 second
+        performance_logger.log_api_performance(
+            endpoint="/api/v1/chat/query",
+            method="POST",
+            duration_ms=processing_time,
+            status_code=200
+        )
     
     return ChatResponse(
         response=response,

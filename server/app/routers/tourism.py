@@ -1,10 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import random
+import time
 from datetime import datetime, timedelta
 
+from ..logging_config import get_logger, ErrorTracker, PerformanceLogger
+
 router = APIRouter()
+logger = get_logger("tourism")
+error_tracker = ErrorTracker(logger)
+performance_logger = PerformanceLogger(logger)
 
 class CrowdStatus(BaseModel):
     shrine: str
@@ -40,7 +46,7 @@ class WeatherInfo(BaseModel):
     best_visit_time: str
 
 @router.get("/crowd-status", response_model=List[CrowdStatus])
-async def get_crowd_status():
+async def get_crowd_status(http_request: Request):
     """
     Returns live crowd status at major shrines with weather and accessibility info.
     
@@ -48,6 +54,13 @@ async def get_crowd_status():
     TODO: Add historical data and prediction models.
     TODO: Connect to weather API for real data.
     """
+    start_time = time.time()
+    request_id = getattr(http_request.state, 'request_id', 'unknown')
+    
+    logger.info("Crowd status request received", extra={
+        "request_id": request_id,
+        "endpoint": "/crowd-status"
+    })
     
     # Simulate realistic crowd data based on time of day and season
     current_hour = datetime.now().hour
@@ -107,18 +120,42 @@ async def get_crowd_status():
             "accessibility": accessibility
         })
     
+    # Calculate processing time
+    processing_time = (time.time() - start_time) * 1000
+    
+    # Log successful response
+    logger.info("Crowd status data generated", extra={
+        "request_id": request_id,
+        "shrines_count": len(mock_data),
+        "processing_time_ms": round(processing_time, 2),
+        "peak_season": is_peak_season
+    })
+    
     return [CrowdStatus(**item) for item in mock_data]
 
 @router.post("/calculate-carbon", response_model=CarbonResponse)
-async def calculate_carbon(request: CarbonRequest):
+async def calculate_carbon(request: CarbonRequest, http_request: Request):
     """
     Enhanced carbon footprint calculator with detailed analysis and recommendations.
     
     Emission factors (kg CO2 per km per vehicle):
     - Car: 0.21, Bike: 0.10, Bus: 0.08, EV: 0.05, SUV: 0.30
     """
+    start_time = time.time()
+    request_id = getattr(http_request.state, 'request_id', 'unknown')
+    
+    logger.info("Carbon calculation request received", extra={
+        "request_id": request_id,
+        "distance": request.distance,
+        "vehicle_type": request.vehicle_type,
+        "passengers": request.passengers
+    })
     
     if request.distance <= 0:
+        logger.warning("Invalid distance provided", extra={
+            "request_id": request_id,
+            "distance": request.distance
+        })
         raise HTTPException(status_code=400, detail="Distance must be greater than 0")
     
     emission_factors = {
@@ -184,6 +221,18 @@ async def calculate_carbon(request: CarbonRequest):
     
     recommendations.append("Choose eco-friendly accommodations with renewable energy")
     recommendations.append("Support local businesses to reduce transportation of goods")
+    
+    # Calculate processing time
+    processing_time = (time.time() - start_time) * 1000
+    
+    # Log successful calculation
+    logger.info("Carbon calculation completed", extra={
+        "request_id": request_id,
+        "total_co2_kg": round(total_co2_kg, 2),
+        "co2_per_person": round(co2_per_person, 2),
+        "trees_to_offset": trees_to_offset,
+        "processing_time_ms": round(processing_time, 2)
+    })
     
     return CarbonResponse(
         co2_kg=round(total_co2_kg, 2),
