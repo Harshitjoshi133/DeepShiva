@@ -111,7 +111,14 @@ const getTranslations = () => ({
       title: 'Chat with Deep-Shiva',
       placeholder: 'Ask about temples, routes, weather...',
       thinking: 'Deep-Shiva is thinking...',
-      voiceInput: 'Voice input (coming soon)'
+      voiceInput: 'Voice input (coming soon)',
+      startVoice: 'Start voice input',
+      stopVoice: 'Stop voice input',
+      send: 'Send message',
+      suggestion1: 'Tell me about Kedarnath temple',
+      suggestion2: 'Best time to visit Char Dham',
+      suggestion3: 'Weather in Rishikesh today',
+      suggestion4: 'Plan a 7-day spiritual journey'
     },
     
     // Yoga Page
@@ -227,7 +234,14 @@ const getTranslations = () => ({
       title: 'दीप-शिव के साथ चैट करें',
       placeholder: 'मंदिरों, मार्गों, मौसम के बारे में पूछें...',
       thinking: 'दीप-शिव सोच रहा है...',
-      voiceInput: 'वॉयस इनपुट (जल्द आ रहा है)'
+      voiceInput: 'वॉयस इनपुट (जल्द आ रहा है)',
+      startVoice: 'वॉयस इनपुट शुरू करें',
+      stopVoice: 'वॉयस इनपुट बंद करें',
+      send: 'संदेश भेजें',
+      suggestion1: 'केदारनाथ मंदिर के बारे में बताएं',
+      suggestion2: 'चार धाम जाने का सबसे अच्छा समय',
+      suggestion3: 'आज ऋषिकेश में मौसम कैसा है',
+      suggestion4: '7 दिन की आध्यात्मिक यात्रा की योजना बनाएं'
     },
     
     // Yoga Page
@@ -343,7 +357,14 @@ const getTranslations = () => ({
       title: 'दीप-शिव से गल्लबात करो',
       placeholder: 'मंदिर, रास्ता, मौसम के बारे में पूछो...',
       thinking: 'दीप-शिव सोच रहा है...',
-      voiceInput: 'आवाज इनपुट (जल्द आएगा)'
+      voiceInput: 'आवाज इनपुट (जल्द आएगा)',
+      startVoice: 'आवाज इनपुट शुरू करो',
+      stopVoice: 'आवाज इनपुट बंद करो',
+      send: 'संदेश भेजो',
+      suggestion1: 'केदारनाथ मंदिर के बारे में बताओ',
+      suggestion2: 'चार धाम जाने का सबसे बढ़िया समय',
+      suggestion3: 'आज ऋषिकेश में मौसम कैसा है',
+      suggestion4: '7 दिन की आध्यात्मिक यात्रा की योजना बनाओ'
     },
     
     // Yoga Page
