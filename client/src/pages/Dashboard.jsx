@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { TrendingUp, Leaf, Car, Lightbulb } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Dashboard() {
+  const { t } = useLanguage()
   const [crowdData, setCrowdData] = useState([])
   const [carbonForm, setCarbonForm] = useState({ distance: '', vehicle: 'car' })
   const [carbonResult, setCarbonResult] = useState(null)
@@ -40,17 +42,17 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
-      <h2 className="text-2xl font-bold text-gray-800">Yatra Dashboard</h2>
+    <div className="max-w-5xl mx-auto space-y-3">
+      <h2 className="text-xl font-bold text-gray-800">{t('dashboard.title', 'Yatra Dashboard')}</h2>
 
       {/* Crowd Meter */}
       <div className="glass-card shadow-2xl">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp size={24} className="text-saffron" />
-          <h3 className="text-xl font-bold gradient-text">Live Crowd Status</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp size={20} className="text-saffron" />
+          <h3 className="text-lg font-bold gradient-text">{t('dashboard.crowdStatus', 'Live Crowd Status')}</h3>
         </div>
         
-        <ResponsiveContainer width="100%" height={250}>
+        <ResponsiveContainer width="100%" height={200}>
           <BarChart data={crowdData}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="shrine" />
@@ -64,7 +66,7 @@ export default function Dashboard() {
           </BarChart>
         </ResponsiveContainer>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
           {crowdData.map((shrine) => {
             const shrineImages = {
               'Kedarnath': '/images/shrines/kedarnath.png',
@@ -73,14 +75,14 @@ export default function Dashboard() {
               'Yamunotri': '/images/shrines/yamontri.png'
             }
             return (
-              <div key={shrine.shrine} className="relative text-center p-3 bg-gray-50 rounded-lg overflow-hidden">
+              <div key={shrine.shrine} className="relative text-center p-2 bg-gray-50 rounded-lg overflow-hidden">
                 <img 
                   src={shrineImages[shrine.shrine]}
                   alt={shrine.shrine}
                   className="absolute inset-0 w-full h-full object-cover opacity-20"
                 />
                 <div className="relative z-10">
-                  <p className="font-semibold text-gray-800 text-sm">{shrine.shrine}</p>
+                  <p className="font-semibold text-gray-800 text-xs">{shrine.shrine}</p>
                   <p className={`text-xs font-bold ${
                     shrine.status === 'Light' ? 'text-green-600' :
                     shrine.status === 'Moderate' ? 'text-orange-600' :
@@ -97,46 +99,46 @@ export default function Dashboard() {
 
       {/* Carbon Calculator */}
       <div className="glass-card shadow-2xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Leaf size={24} className="text-forest" />
-          <h3 className="text-xl font-bold gradient-text">Carbon Footprint Calculator</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <Leaf size={20} className="text-forest" />
+          <h3 className="text-lg font-bold gradient-text">{t('dashboard.carbonCalculator', 'Carbon Footprint Calculator')}</h3>
         </div>
 
-        <form onSubmit={handleCarbonSubmit} className="grid md:grid-cols-3 gap-3 mb-4">
+        <form onSubmit={handleCarbonSubmit} className="grid md:grid-cols-3 gap-2 mb-3">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Distance (km)
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              {t('dashboard.distance', 'Distance (km)')}
             </label>
             <input
               type="number"
               value={carbonForm.distance}
               onChange={(e) => setCarbonForm({...carbonForm, distance: e.target.value})}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-forest"
-              placeholder="Enter distance"
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-forest text-sm"
+              placeholder={t('dashboard.distance', 'Enter distance')}
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Vehicle Type
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              {t('dashboard.vehicleType', 'Vehicle Type')}
             </label>
             <select
               value={carbonForm.vehicle}
               onChange={(e) => setCarbonForm({...carbonForm, vehicle: e.target.value})}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-forest"
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-forest text-sm"
             >
-              <option value="car">Car</option>
-              <option value="bike">Bike</option>
-              <option value="bus">Bus</option>
-              <option value="ev">Electric Vehicle</option>
+              <option value="car">{t('dashboard.vehicles.car', 'Car')}</option>
+              <option value="bike">{t('dashboard.vehicles.bike', 'Bike')}</option>
+              <option value="bus">{t('dashboard.vehicles.bus', 'Bus')}</option>
+              <option value="ev">{t('dashboard.vehicles.ev', 'Electric Vehicle')}</option>
             </select>
           </div>
 
           <div className="flex items-end">
-            <button type="submit" className="w-full btn-secondary flex items-center justify-center gap-2">
-              <Car size={20} />
-              Calculate
+            <button type="submit" className="w-full btn-secondary flex items-center justify-center gap-2 text-sm">
+              <Car size={16} />
+              {t('dashboard.calculate', 'Calculate')}
             </button>
           </div>
         </form>
@@ -147,21 +149,21 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card bg-gradient-to-r from-green-100/80 to-blue-100/80 border-2 border-green-500/30 shadow-xl"
           >
-            <h4 className="text-lg font-bold text-gray-800 mb-3">Your Carbon Impact</h4>
-            <div className="grid md:grid-cols-2 gap-3">
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">CO₂ Emissions</p>
-                <p className="text-3xl font-bold text-gray-800">{carbonResult.co2_kg.toFixed(2)} kg</p>
+            <h4 className="text-base font-bold text-gray-800 mb-2">{t('dashboard.carbonImpact', 'Your Carbon Impact')}</h4>
+            <div className="grid md:grid-cols-2 gap-2">
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">{t('dashboard.emissions', 'CO₂ Emissions')}</p>
+                <p className="text-2xl font-bold text-gray-800">{carbonResult.co2_kg.toFixed(2)} kg</p>
               </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">vs. Standard SUV</p>
-                <p className="text-3xl font-bold text-green-600">
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">{t('dashboard.vsSuv', 'vs. Standard SUV')}</p>
+                <p className="text-2xl font-bold text-green-600">
                   {carbonResult.saved_vs_suv > 0 ? '-' : '+'}{Math.abs(carbonResult.saved_vs_suv).toFixed(2)} kg
                 </p>
               </div>
             </div>
-            <p className="mt-4 text-sm text-gray-700">
-              <Lightbulb size={16} className="inline mr-1" /> Tip: Consider carpooling or using public transport to reduce your carbon footprint!
+            <p className="mt-3 text-xs text-gray-700">
+              <Lightbulb size={14} className="inline mr-1" /> {t('dashboard.tip', 'Tip: Consider carpooling or using public transport to reduce your carbon footprint!')}
             </p>
           </motion.div>
         )}

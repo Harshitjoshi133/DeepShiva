@@ -13,19 +13,19 @@ body {
 
 @layer utilities {
   .btn-primary {
-    @apply bg-saffron hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105;
+    @apply bg-saffron hover:bg-orange-600 text-white font-semibold py-1 px-3 rounded-md transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 text-xs;
   }
   
   .btn-secondary {
-    @apply bg-forest hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105;
+    @apply bg-forest hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-md transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 text-xs;
   }
   
   .card {
-    @apply bg-white/80 backdrop-blur-md rounded-lg shadow-lg p-4 hover:shadow-xl transition-all duration-300 border border-white/20;
+    @apply bg-white/80 backdrop-blur-md rounded-md shadow-md p-2 hover:shadow-lg transition-all duration-300 border border-white/20;
   }
   
   .glass-card {
-    @apply bg-white/10 backdrop-blur-lg rounded-xl shadow-xl border border-white/20 p-4 hover:bg-white/20 transition-all duration-300;
+    @apply bg-white/10 backdrop-blur-lg rounded-lg shadow-lg border border-white/20 p-2 hover:bg-white/20 transition-all duration-300;
   }
   
   .glass-nav {

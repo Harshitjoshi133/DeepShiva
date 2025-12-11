@@ -2,20 +2,21 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Home, MessageCircle, Activity, BarChart3, Palette, AlertCircle, Menu, X, Globe } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-
-const navItems = [
-  { path: '/', icon: Home, label: 'Home' },
-  { path: '/chat', icon: MessageCircle, label: 'Chat' },
-  { path: '/yoga-sentinel', icon: Activity, label: 'Yoga' },
-  { path: '/dashboard', icon: BarChart3, label: 'Dashboard' },
-  { path: '/culture', icon: Palette, label: 'Culture' },
-  { path: '/emergency', icon: AlertCircle, label: 'SOS' },
-]
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Layout({ children }) {
   const location = useLocation()
-  const [language, setLanguage] = useState('en')
+  const { language, changeLanguage, t } = useLanguage()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const navItems = [
+    { path: '/', icon: Home, label: t('nav.home', 'Home') },
+    { path: '/chat', icon: MessageCircle, label: t('nav.chat', 'Chat') },
+    { path: '/yoga-sentinel', icon: Activity, label: t('nav.yoga', 'Yoga') },
+    { path: '/dashboard', icon: BarChart3, label: t('nav.dashboard', 'Dashboard') },
+    { path: '/culture', icon: Palette, label: t('nav.culture', 'Culture') },
+    { path: '/emergency', icon: AlertCircle, label: t('nav.emergency', 'SOS') },
+  ]
 
   const languages = {
     en: 'English',
@@ -35,7 +36,7 @@ export default function Layout({ children }) {
       <div className="relative z-10">
       {/* Header */}
       <header className="glass-nav shadow-lg sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -44,17 +45,17 @@ export default function Layout({ children }) {
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
             <div className="flex items-center gap-2">
-              <img src="/images/branding/logo.svg" alt="Deep-Shiva" className="h-6 w-6" />
-              <h1 className="text-xl font-bold gradient-text">Deep-Shiva</h1>
+              <img src="/images/branding/logo.svg" alt="Deep-Shiva" className="h-5 w-5" />
+              <h1 className="text-lg font-bold gradient-text">Deep-Shiva</h1>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Globe size={20} className="text-forest" />
+          <div className="flex items-center gap-1">
+            <Globe size={16} className="text-forest" />
             <select 
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="bg-white/20 backdrop-blur-sm border-2 border-forest/30 rounded-lg px-3 py-1 font-semibold text-forest focus:outline-none focus:ring-2 focus:ring-forest/50 focus:bg-white/30 transition-all duration-200"
+              onChange={(e) => changeLanguage(e.target.value)}
+              className="bg-white/20 backdrop-blur-sm border border-forest/30 rounded-md px-2 py-1 text-sm font-semibold text-forest focus:outline-none focus:ring-1 focus:ring-forest/50 focus:bg-white/30 transition-all duration-200"
             >
               {Object.entries(languages).map(([code, name]) => (
                 <option key={code} value={code}>{name}</option>
@@ -66,8 +67,8 @@ export default function Layout({ children }) {
 
       <div className="flex">
         {/* Desktop Sidebar */}
-        <aside className="hidden lg:block w-64 glass-sidebar shadow-xl min-h-[calc(100vh-73px)] sticky top-[73px]">
-          <nav className="p-4 space-y-2">
+        <aside className="hidden lg:block w-52 glass-sidebar shadow-xl min-h-[calc(100vh-61px)] sticky top-[61px]">
+          <nav className="p-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
@@ -75,14 +76,14 @@ export default function Layout({ children }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md transition-all duration-300 ${
                     isActive 
-                      ? 'bg-gradient-to-r from-saffron to-orange-500 text-white shadow-lg glow-effect' 
-                      : 'hover:bg-white/30 text-gray-700 hover:shadow-md'
+                      ? 'bg-gradient-to-r from-saffron to-orange-500 text-white shadow-md glow-effect' 
+                      : 'hover:bg-white/30 text-gray-700 hover:shadow-sm'
                   }`}
                 >
-                  <Icon size={20} />
-                  <span className="font-medium">{item.label}</span>
+                  <Icon size={16} />
+                  <span className="font-medium text-sm">{item.label}</span>
                 </Link>
               )
             })}
@@ -96,9 +97,9 @@ export default function Layout({ children }) {
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
-              className="lg:hidden fixed inset-y-0 left-0 w-64 bg-white shadow-2xl z-50 top-[73px]"
+              className="lg:hidden fixed inset-y-0 left-0 w-52 bg-white shadow-2xl z-50 top-[61px]"
             >
-              <nav className="p-4 space-y-2">
+              <nav className="p-3 space-y-1">
                 {navItems.map((item) => {
                   const Icon = item.icon
                   const isActive = location.pathname === item.path
@@ -124,7 +125,7 @@ export default function Layout({ children }) {
         </AnimatePresence>
 
         {/* Main Content */}
-        <main className="flex-1 p-3 lg:p-6">
+        <main className="flex-1 p-2 lg:p-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

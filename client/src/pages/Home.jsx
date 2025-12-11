@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
 import { Users, Activity, AlertCircle, Mountain, Sparkles, Heart, Palette, Leaf, Globe } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Home() {
+  const { t } = useLanguage()
+  
   const quickActions = [
-    { icon: Users, label: 'Check Crowd Status', path: '/dashboard', color: 'bg-blue-500' },
-    { icon: Activity, label: 'Yoga Mode', path: '/yoga-sentinel', color: 'bg-green-500' },
-    { icon: AlertCircle, label: 'Emergency Help', path: '/emergency', color: 'bg-red-500' },
+    { icon: Users, label: t('home.checkCrowd', 'Check Crowd Status'), path: '/dashboard', color: 'bg-blue-500' },
+    { icon: Activity, label: t('home.yogaMode', 'Yoga Mode'), path: '/yoga-sentinel', color: 'bg-green-500' },
+    { icon: AlertCircle, label: t('home.emergencyHelp', 'Emergency Help'), path: '/emergency', color: 'bg-red-500' },
   ]
 
   return (
@@ -26,31 +29,31 @@ export default function Home() {
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-8 relative z-10"
       >
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-3">
           <div className="floating-animation">
             <img 
               src="/images/hero/moutain-icon.svg" 
               alt="Mountain" 
-              className="h-16 w-16 text-saffron pulse-glow"
+              className="h-12 w-12 text-saffron pulse-glow"
             />
           </div>
         </div>
-        <h1 className="text-3xl lg:text-5xl font-bold text-gray-800 mb-3">
-          Plan Your Yatra to <span className="gradient-text">Uttarakhand</span>
+        <h1 className="text-2xl lg:text-4xl font-bold text-gray-800 mb-2">
+          {t('home.title', 'Plan Your Yatra to')} <span className="gradient-text">Uttarakhand</span>
         </h1>
-        <p className="text-lg text-gray-600 mb-6">
-          Your AI-powered spiritual guide for eco-tourism, yoga, and sacred journeys
+        <p className="text-base text-gray-600 mb-4">
+          {t('home.subtitle', 'Your AI-powered spiritual guide for eco-tourism, yoga, and sacred journeys')}
         </p>
         <Link to="/chat" className="btn-primary inline-flex items-center gap-2 pulse-glow">
           <Sparkles size={20} />
-          Start Your Journey
+          {t('home.startJourney', 'Start Your Journey')}
         </Link>
       </motion.div>
 
       {/* Quick Actions */}
-      <div className="mb-8">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-800 mb-3 text-center">{t('home.quickActions', 'Quick Actions')}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {quickActions.map((action, index) => {
             const Icon = action.icon
             return (
@@ -61,10 +64,10 @@ export default function Home() {
                 transition={{ delay: index * 0.1 }}
               >
                 <Link to={action.path} className="glass-card hover:scale-105 transition-all duration-300 group">
-                  <div className={`${action.color} w-12 h-12 rounded-full flex items-center justify-center mb-3 mx-auto shadow-lg group-hover:shadow-xl transition-shadow duration-300`}>
-                    <Icon size={24} className="text-white" />
+                  <div className={`${action.color} w-10 h-10 rounded-full flex items-center justify-center mb-2 mx-auto shadow-lg group-hover:shadow-xl transition-shadow duration-300`}>
+                    <Icon size={20} className="text-white" />
                   </div>
-                  <h3 className="text-lg font-semibold text-center text-gray-800">{action.label}</h3>
+                  <h3 className="text-base font-semibold text-center text-gray-800">{action.label}</h3>
                 </Link>
               </motion.div>
             )
@@ -74,18 +77,18 @@ export default function Home() {
 
       {/* Features */}
       <div className="glass-card gradient-bg text-white shadow-2xl">
-        <h2 className="text-2xl font-bold mb-4">Why Deep-Shiva?</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <h2 className="text-xl font-bold mb-3">{t('home.whyDeepShiva', 'Why Deep-Shiva?')}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
             className="flex items-start gap-3"
           >
-            <Heart size={20} className="text-white mt-1 flex-shrink-0" />
+            <Heart size={16} className="text-white mt-1 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold mb-1">Spiritual Guidance</h3>
-              <p>Get personalized yatra recommendations and spiritual insights</p>
+              <h3 className="text-base font-semibold mb-1">{t('home.spiritualGuidance', 'Spiritual Guidance')}</h3>
+              <p>{t('home.spiritualDesc', 'Get personalized yatra recommendations and spiritual insights')}</p>
             </div>
           </motion.div>
           <motion.div 
@@ -94,10 +97,10 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="flex items-start gap-3"
           >
-            <Activity size={20} className="text-white mt-1 flex-shrink-0" />
+            <Activity size={16} className="text-white mt-1 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold mb-1">Yoga Correction</h3>
-              <p>Real-time posture analysis using AI vision technology</p>
+              <h3 className="text-base font-semibold mb-1">{t('home.yogaCorrection', 'Yoga Correction')}</h3>
+              <p>{t('home.yogaDesc', 'Real-time posture analysis using AI vision technology')}</p>
             </div>
           </motion.div>
           <motion.div 
@@ -106,10 +109,10 @@ export default function Home() {
             transition={{ delay: 0.3 }}
             className="flex items-start gap-3"
           >
-            <Leaf size={20} className="text-white mt-1 flex-shrink-0" />
+            <Leaf size={16} className="text-white mt-1 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold mb-1">Eco-Tourism</h3>
-              <p>Calculate your carbon footprint and travel sustainably</p>
+              <h3 className="text-base font-semibold mb-1">{t('home.ecoTourism', 'Eco-Tourism')}</h3>
+              <p>{t('home.ecoDesc', 'Calculate your carbon footprint and travel sustainably')}</p>
             </div>
           </motion.div>
           <motion.div 
@@ -118,10 +121,10 @@ export default function Home() {
             transition={{ delay: 0.4 }}
             className="flex items-start gap-3"
           >
-            <Palette size={20} className="text-white mt-1 flex-shrink-0" />
+            <Palette size={16} className="text-white mt-1 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold mb-1">Local Culture</h3>
-              <p>Discover and support local artisans and traditions</p>
+              <h3 className="text-base font-semibold mb-1">{t('home.localCulture', 'Local Culture')}</h3>
+              <p>{t('home.cultureDesc', 'Discover and support local artisans and traditions')}</p>
             </div>
           </motion.div>
         </div>
