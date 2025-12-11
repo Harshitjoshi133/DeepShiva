@@ -1,15 +1,99 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
-import random
+from typing import List, Optional, Dict, Any
+import time
 from datetime import datetime
+import uuid
+import json
+from pathlib import Path
 
-from ..logging_config import get_logger, ErrorTracker, PerformanceLogger
+from ..logging_config import get_logger, ErrorTracker, PerformanceLogger, get_ai_response_logger, AIResponseLogger
+from ..services.ollama_service import ollama_service
 
 router = APIRouter()
 logger = get_logger("chat")
 error_tracker = ErrorTracker(logger)
 performance_logger = PerformanceLogger(logger)
+ai_response_logger = AIResponseLogger(get_ai_response_logger())
+
+# Helper functions for response analysis
+def _extract_context_from_response(response: str) -> List[str]:
+    """Extract context keywords from AI response"""
+    context_keywords = {
+        "pilgrimage": ["kedarnath", "badrinath", "gangotri", "yamunotri", "char dham", "temple", "shrine"],
+        "travel": ["route", "road", "journey", "transport", "helicopter", "trek", "distance"],
+        "weather": ["weather", "temperature", "season", "rain", "snow", "climate"],
+        "accommodation": ["hotel", "stay", "lodge", "guesthouse", "booking", "accommodation"],
+        "culture": ["culture", "tradition", "art", "handicraft", "local", "artisan"],
+        "spirituality": ["spiritual", "meditation", "yoga", "prayer", "blessing", "sacred"],
+        "safety": ["safety", "precaution", "emergency", "first aid", "rescue"]
+    }
+    
+    response_lower = response.lower()
+    found_contexts = []
+    
+    for context, keywords in context_keywords.items():
+        if any(keyword in response_lower for keyword in keywords):
+            found_contexts.append(context)
+    
+    return found_contexts[:3]  # Return top 3 contexts
+
+def _generate_suggested_actions(message: str, response: str) -> List[str]:
+    """Generate suggested actions based on message and response"""
+    message_lower = message.lower()
+    response_lower = response.lower()
+    
+    suggestions = []
+    
+    # Context-based suggestions
+    if any(word in message_lower for word in ["weather", "temperature", "climate"]):
+        suggestions.extend(["Check current weather", "View 7-day forecast", "Pack weather-appropriate gear"])
+    
+    if any(word in message_lower for word in ["route", "travel", "journey", "how to reach"]):
+        suggestions.extend(["Calculate carbon footprint", "Find accommodation", "Check road conditions"])
+    
+    if any(word in message_lower for word in ["kedarnath", "badrinath", "gangotri", "yamunotri"]):
+        suggestions.extend(["Check crowd status", "View shrine timings", "Book helicopter tickets"])
+    
+    if any(word in message_lower for word in ["stay", "hotel", "accommodation"]):
+        suggestions.extend(["Find nearby hotels", "Check availability", "Read reviews"])
+    
+    if any(word in message_lower for word in ["yoga", "meditation", "spiritual"]):
+        suggestions.extend(["Try yoga poses", "Find meditation centers", "Learn breathing techniques"])
+    
+    # Default suggestions if none match
+    if not suggestions:
+        suggestions = ["Ask about Char Dham", "Check weather conditions", "Plan your journey"]
+    
+    return suggestions[:3]  # Return top 3 suggestions
+
+def _generate_related_topics(message: str, response: str) -> List[str]:
+    """Generate related topics based on message and response"""
+    message_lower = message.lower()
+    
+    topics = []
+    
+    # Topic mapping
+    if any(word in message_lower for word in ["kedarnath", "badrinath", "gangotri", "yamunotri", "char dham"]):
+        topics.extend(["Temple timings", "Accommodation options", "Travel routes"])
+    
+    if any(word in message_lower for word in ["weather", "temperature"]):
+        topics.extend(["Best travel time", "What to pack", "Seasonal guidelines"])
+    
+    if any(word in message_lower for word in ["travel", "route", "journey"]):
+        topics.extend(["Road conditions", "Fuel stops", "Emergency contacts"])
+    
+    if any(word in message_lower for word in ["culture", "tradition", "art"]):
+        topics.extend(["Local festivals", "Handicrafts", "Traditional food"])
+    
+    if any(word in message_lower for word in ["yoga", "meditation"]):
+        topics.extend(["Yoga centers", "Spiritual practices", "Ashram stays"])
+    
+    # Default topics
+    if not topics:
+        topics = ["Pilgrimage planning", "Local culture", "Travel tips"]
+    
+    return topics[:3]  # Return top 3 topics
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000, description="User message")
@@ -25,6 +109,9 @@ class ChatResponse(BaseModel):
     context_used: List[str]
     suggested_actions: List[str]
     related_topics: List[str]
+    ai_metadata: Dict[str, Any]
+    processing_time_ms: float
+    model_used: str
 
 class ConversationHistory(BaseModel):
     user_id: str
@@ -35,17 +122,13 @@ class ConversationHistory(BaseModel):
 @router.post("/query", response_model=ChatResponse)
 async def chat_query(request: ChatRequest, http_request: Request):
     """
-    Enhanced chat endpoint with context-aware responses.
-    
-    TODO: Connect to Ollama LLM here for actual AI responses.
-    TODO: Integrate VectorDB for RAG-based context retrieval.
-    TODO: Add conversation memory and personalization.
+    AI-powered chat endpoint using Ollama for intelligent responses.
+    Provides context-aware responses about Uttarakhand tourism and Char Dham pilgrimage.
     """
-    import time
     start_time = time.time()
     request_id = getattr(http_request.state, 'request_id', 'unknown')
     
-    logger.info("Chat query received", extra={
+    logger.info("AI chat query received", extra={
         "request_id": request_id,
         "user_id": request.user_id,
         "message_length": len(request.message),
@@ -60,134 +143,95 @@ async def chat_query(request: ChatRequest, http_request: Request):
         })
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
-    # Analyze message for intent and keywords
-    message_lower = request.message.lower()
-    
-    # Knowledge base for different topics
-    knowledge_base = {
-        "char_dham": {
-            "keywords": ["char dham", "kedarnath", "badrinath", "gangotri", "yamunotri", "four dhams"],
-            "responses": [
-                "The Char Dham Yatra is one of the most sacred pilgrimages in Hinduism. It includes Kedarnath (3,583m), Badrinath (3,133m), Gangotri (3,100m), and Yamunotri (3,293m). Each shrine has its own significance and the best time to visit is from May to October.",
-                "Char Dham represents the four sacred abodes in Uttarakhand. Kedarnath is dedicated to Lord Shiva, Badrinath to Lord Vishnu, while Gangotri and Yamunotri are the sources of rivers Ganga and Yamuna respectively.",
-            ],
-            "context": ["pilgrimage", "temples", "spirituality"],
-            "actions": ["Check crowd status", "Plan route", "Book accommodation"],
-            "related": ["Weather conditions", "Travel routes", "Accommodation options"]
-        },
-        "weather": {
-            "keywords": ["weather", "temperature", "rain", "snow", "climate", "season"],
-            "responses": [
-                "Uttarakhand's weather varies greatly with altitude. The Char Dham shrines experience cold temperatures year-round. Summer (May-June) is ideal for pilgrimage with temperatures 5-15°C. Monsoon (July-August) brings heavy rainfall and landslides. Winter (November-April) sees heavy snowfall and shrine closures.",
-                "The weather in Uttarakhand's high-altitude regions can change rapidly. Always carry warm clothing, rain gear, and check weather forecasts before traveling. The shrines are typically closed from November to April due to heavy snowfall.",
-            ],
-            "context": ["travel planning", "safety"],
-            "actions": ["Check current weather", "View forecast", "Pack accordingly"],
-            "related": ["Best travel time", "What to pack", "Safety precautions"]
-        },
-        "travel": {
-            "keywords": ["travel", "route", "road", "transport", "bus", "car", "helicopter"],
-            "responses": [
-                "Travel to Char Dham involves well-connected road networks from Rishikesh and Haridwar. Kedarnath requires a 16km trek from Gaurikund, while others are accessible by road. Helicopter services are available for Kedarnath and Badrinath during peak season.",
-                "The main routes start from Rishikesh: Rishikesh-Kedarnath (223km + 16km trek), Rishikesh-Badrinath (301km), Rishikesh-Gangotri (249km), and Rishikesh-Yamunotri (209km). Roads can be challenging with narrow mountain paths.",
-            ],
-            "context": ["logistics", "planning"],
-            "actions": ["Calculate carbon footprint", "Find routes", "Book transport"],
-            "related": ["Road conditions", "Fuel stops", "Emergency contacts"]
-        },
-        "accommodation": {
-            "keywords": ["stay", "hotel", "accommodation", "lodge", "dharamshala", "booking"],
-            "responses": [
-                "Accommodation options range from government guesthouses and dharamshalas to private hotels. Book in advance during peak season (May-October). Basic facilities are available near all shrines, with better options in base towns like Guptkashi, Joshimath, and Uttarkashi.",
-                "Stay options include GMVN (Garhwal Mandal Vikas Nigam) guesthouses, private hotels, and ashrams. Prices range from ₹500-5000 per night. Basic amenities like hot water and heating may be limited at high altitudes.",
-            ],
-            "context": ["comfort", "planning"],
-            "actions": ["Find hotels", "Check availability", "Read reviews"],
-            "related": ["Booking platforms", "Cancellation policies", "Amenities available"]
-        },
-        "culture": {
-            "keywords": ["culture", "tradition", "art", "handicraft", "local", "artisan", "shopping"],
-            "responses": [
-                "Uttarakhand has rich cultural heritage with traditional arts like Aipan (floor art), Ringal bamboo crafts, and handwoven textiles. Local artisans create beautiful woolen shawls, copper utensils, and wooden carvings. Support local communities by purchasing authentic handicrafts.",
-                "The region's culture reflects its spiritual significance and mountain lifestyle. Traditional music, dance forms like Langvir Nritya, and festivals like Nanda Devi Raj Jat showcase the local heritage. Local markets offer organic honey, herbal products, and traditional crafts.",
-            ],
-            "context": ["shopping", "heritage"],
-            "actions": ["Browse products", "Find artisans", "Learn about crafts"],
-            "related": ["Local markets", "Authentic products", "Cultural festivals"]
-        },
-        "yoga": {
-            "keywords": ["yoga", "meditation", "asana", "pose", "spiritual", "practice"],
-            "responses": [
-                "Uttarakhand, especially Rishikesh, is known as the 'Yoga Capital of the World'. The serene mountain environment is perfect for yoga practice and meditation. Many ashrams offer yoga courses, and the spiritual energy of the region enhances the practice.",
-                "Practicing yoga in the Himalayas connects you with nature's energy. Mountain poses like Warrior and Tree pose feel more meaningful here. The clean air and peaceful environment help deepen your practice and meditation.",
-            ],
-            "context": ["wellness", "spirituality"],
-            "actions": ["Try yoga poses", "Find classes", "Learn meditation"],
-            "related": ["Yoga centers", "Meditation techniques", "Spiritual practices"]
-        }
-    }
-    
-    # Find matching topic
-    matched_topic = None
-    for topic, data in knowledge_base.items():
-        if any(keyword in message_lower for keyword in data["keywords"]):
-            matched_topic = topic
-            break
-    
-    # Generate response
-    if matched_topic:
-        topic_data = knowledge_base[matched_topic]
-        response = random.choice(topic_data["responses"])
-        context_used = topic_data["context"]
-        suggested_actions = topic_data["actions"]
-        related_topics = topic_data["related"]
-    else:
-        # Generic response for unmatched queries
-        response = f"I am Deep-Shiva, your spiritual guide for Uttarakhand tourism. I understand you're asking about '{request.message}'. While I'm being enhanced with advanced AI capabilities, I can help you with information about the Char Dham pilgrimage, weather conditions, travel routes, local culture, and yoga practices. What specific aspect would you like to know more about?"
-        context_used = ["general"]
-        suggested_actions = ["Ask about Char Dham", "Check weather", "Plan travel"]
-        related_topics = ["Pilgrimage sites", "Travel planning", "Local culture"]
-    
-    # Add personalization based on language
-    if request.language == "hi":
-        response = f"नमस्ते! {response}"
-    elif request.language == "ga":  # Garhwali
-        response = f"जय भोले की! {response}"
-    
-    # Generate unique message ID
-    message_id = f"msg_{random.randint(100000, 999999)}"
-    
-    # Calculate processing time
-    processing_time = (time.time() - start_time) * 1000
-    
-    # Log successful response
-    logger.info("Chat query processed successfully", extra={
-        "request_id": request_id,
-        "user_id": request.user_id,
-        "message_id": message_id,
-        "matched_topic": matched_topic,
-        "processing_time_ms": round(processing_time, 2),
-        "response_length": len(response)
-    })
-    
-    # Log performance if slow
-    if processing_time > 1000:  # Log if over 1 second
-        performance_logger.log_api_performance(
-            endpoint="/api/v1/chat/query",
-            method="POST",
-            duration_ms=processing_time,
-            status_code=200
+    try:
+        # Get conversation history (mock for now - in production, fetch from database)
+        conversation_history = []  # TODO: Implement conversation history from database
+        
+        # Generate AI response using Ollama
+        ai_result = await ollama_service.generate_response(
+            message=request.message,
+            user_id=request.user_id,
+            context=request.context,
+            conversation_history=conversation_history,
+            language=request.language
         )
-    
-    return ChatResponse(
-        response=response,
-        user_id=request.user_id,
-        message_id=message_id,
-        timestamp=datetime.now().isoformat(),
-        context_used=context_used,
-        suggested_actions=suggested_actions[:3],  # Limit to 3 suggestions
-        related_topics=related_topics[:3]  # Limit to 3 related topics
-    )
+        
+        # Generate unique message ID
+        message_id = f"msg_{uuid.uuid4().hex[:8]}"
+        
+        # Extract context and suggestions from AI response (simple keyword analysis)
+        context_used = _extract_context_from_response(ai_result["response"])
+        suggested_actions = _generate_suggested_actions(request.message, ai_result["response"])
+        related_topics = _generate_related_topics(request.message, ai_result["response"])
+        
+        # Calculate total processing time
+        total_processing_time = (time.time() - start_time) * 1000
+        
+        # Log successful response
+        logger.info("AI chat query processed successfully", extra={
+            "request_id": request_id,
+            "user_id": request.user_id,
+            "message_id": message_id,
+            "ai_success": ai_result["success"],
+            "model_used": ai_result["model"],
+            "ai_processing_time_ms": ai_result["processing_time_ms"],
+            "total_processing_time_ms": round(total_processing_time, 2),
+            "response_length": len(ai_result["response"])
+        })
+        
+        # Log conversation context and suggestions
+        ai_response_logger.log_conversation_context(
+            user_id=request.user_id,
+            message_id=message_id,
+            context_used=context_used,
+            suggested_actions=suggested_actions,
+            related_topics=related_topics,
+            request_id=request_id
+        )
+        
+        # Log performance if slow
+        if total_processing_time > 2000:  # Log if over 2 seconds
+            performance_logger.log_api_performance(
+                endpoint="/api/v1/chat/query",
+                method="POST",
+                duration_ms=total_processing_time,
+                status_code=200
+            )
+        
+        return ChatResponse(
+            response=ai_result["response"],
+            user_id=request.user_id,
+            message_id=message_id,
+            timestamp=datetime.now().isoformat(),
+            context_used=context_used,
+            suggested_actions=suggested_actions,
+            related_topics=related_topics,
+            ai_metadata=ai_result.get("metadata", {}),
+            processing_time_ms=round(total_processing_time, 2),
+            model_used=ai_result["model"]
+        )
+        
+    except Exception as e:
+        processing_time = (time.time() - start_time) * 1000
+        
+        error_tracker.log_validation_error(e, {
+            "request_id": request_id,
+            "user_id": request.user_id,
+            "message": request.message[:100],  # First 100 chars for privacy
+            "language": request.language
+        })
+        
+        logger.error("Chat query processing failed", extra={
+            "request_id": request_id,
+            "user_id": request.user_id,
+            "error": str(e),
+            "processing_time_ms": round(processing_time, 2)
+        })
+        
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process chat query. Please try again later."
+        )
 @router.get("/history/{user_id}", response_model=ConversationHistory)
 async def get_conversation_history(
     user_id: str,
@@ -409,3 +453,354 @@ async def translate_message(request: TranslateRequest):
         "target_language": request.target_language,
         "confidence": 0.95 if translated_text != request.text else 0.1
     }
+
+@router.get("/ollama/status")
+async def get_ollama_status(request: Request):
+    """
+    Get Ollama service status and model information
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info("Ollama status check requested", extra={
+        "request_id": request_id
+    })
+    
+    try:
+        # Check Ollama connection
+        connection_ok = await ollama_service.check_connection()
+        
+        # Check model availability
+        model_available = await ollama_service.check_model_availability() if connection_ok else False
+        
+        # Get model info
+        model_info = await ollama_service.get_model_info() if connection_ok else {}
+        
+        status = {
+            "ollama_connected": connection_ok,
+            "model_available": model_available,
+            "model_info": model_info,
+            "configuration": {
+                "host": ollama_service.host,
+                "model": ollama_service.model,
+                "timeout": ollama_service.timeout,
+                "temperature": ollama_service.temperature,
+                "max_tokens": ollama_service.max_tokens
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        logger.info("Ollama status check completed", extra={
+            "request_id": request_id,
+            "connected": connection_ok,
+            "model_available": model_available
+        })
+        
+        return status
+        
+    except Exception as e:
+        error_tracker.log_external_api_error(e, "Ollama", "status_check")
+        
+        return {
+            "ollama_connected": False,
+            "model_available": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@router.post("/ollama/pull-model")
+async def pull_ollama_model(request: Request, model_name: Optional[str] = None):
+    """
+    Pull/download a model to Ollama
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    model = model_name or ollama_service.model
+    
+    logger.info("Model pull requested", extra={
+        "request_id": request_id,
+        "model": model
+    })
+    
+    try:
+        success = await ollama_service.pull_model(model)
+        
+        if success:
+            logger.info("Model pulled successfully", extra={
+                "request_id": request_id,
+                "model": model
+            })
+            
+            return {
+                "success": True,
+                "message": f"Model '{model}' pulled successfully",
+                "model": model,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to pull model '{model}'",
+                "model": model,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+    except Exception as e:
+        error_tracker.log_external_api_error(e, "Ollama", "pull_model")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "model": model,
+            "timestamp": datetime.now().isoformat()
+        }
+
+@router.post("/test-ai")
+async def test_ai_response(request: Request):
+    """
+    Test AI response with a simple query
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info("AI test requested", extra={
+        "request_id": request_id
+    })
+    
+    try:
+        test_message = "Hello, tell me about Kedarnath temple in one sentence."
+        
+        ai_result = await ollama_service.generate_response(
+            message=test_message,
+            user_id="test_user",
+            context="Testing AI functionality",
+            language="en"
+        )
+        
+        logger.info("AI test completed", extra={
+            "request_id": request_id,
+            "success": ai_result["success"],
+            "model": ai_result["model"],
+            "processing_time_ms": ai_result["processing_time_ms"]
+        })
+        
+        return {
+            "test_message": test_message,
+            "ai_response": ai_result["response"],
+            "success": ai_result["success"],
+            "model_used": ai_result["model"],
+            "processing_time_ms": ai_result["processing_time_ms"],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        error_tracker.log_external_api_error(e, "Ollama", "test_ai")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@router.get("/ai-logs")
+async def get_ai_response_logs(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200, description="Number of logs to return"),
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    success_only: bool = Query(False, description="Show only successful responses")
+):
+    """
+    Get recent AI response logs for monitoring and debugging
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info("AI logs requested", extra={
+        "request_id": request_id,
+        "limit": limit,
+        "user_filter": user_id,
+        "success_only": success_only
+    })
+    
+    try:
+        logs = []
+        log_file_path = Path("logs/ai_responses.log")
+        
+        if log_file_path.exists():
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Parse recent log lines
+            for line in reversed(lines[-limit*2:]):  # Get more lines to filter
+                try:
+                    log_data = json.loads(line.strip())
+                    
+                    # Apply filters
+                    if user_id and log_data.get('user_id') != user_id:
+                        continue
+                    if success_only and not log_data.get('success', True):
+                        continue
+                    
+                    # Clean up log data for API response
+                    clean_log = {
+                        "timestamp": log_data.get('timestamp'),
+                        "event_type": log_data.get('event_type'),
+                        "user_id": log_data.get('user_id'),
+                        "message_id": log_data.get('message_id'),
+                        "user_message": log_data.get('user_message', ''),
+                        "ai_response": log_data.get('ai_response', ''),
+                        "model_used": log_data.get('model_used'),
+                        "processing_time_ms": log_data.get('processing_time_ms'),
+                        "language": log_data.get('language'),
+                        "success": log_data.get('success', True),
+                        "context": log_data.get('context'),
+                        "context_used": log_data.get('context_used', []),
+                        "suggested_actions": log_data.get('suggested_actions', []),
+                        "related_topics": log_data.get('related_topics', [])
+                    }
+                    
+                    logs.append(clean_log)
+                    
+                    if len(logs) >= limit:
+                        break
+                        
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        logger.info("AI logs retrieved", extra={
+            "request_id": request_id,
+            "logs_returned": len(logs)
+        })
+        
+        return {
+            "logs": logs,
+            "total_returned": len(logs),
+            "filters_applied": {
+                "user_id": user_id,
+                "success_only": success_only,
+                "limit": limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        error_tracker.log_external_api_error(e, "FileSystem", "ai_logs")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve AI logs"
+        )
+
+@router.get("/ai-stats")
+async def get_ai_statistics(
+    request: Request,
+    hours: int = Query(24, ge=1, le=168, description="Hours to analyze")
+):
+    """
+    Get AI response statistics and performance metrics
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info("AI statistics requested", extra={
+        "request_id": request_id,
+        "hours": hours
+    })
+    
+    try:
+        # Parse AI logs for statistics
+        stats = {
+            "total_responses": 0,
+            "successful_responses": 0,
+            "failed_responses": 0,
+            "avg_processing_time_ms": 0,
+            "models_used": {},
+            "languages_used": {},
+            "most_common_contexts": {},
+            "response_time_distribution": {
+                "under_1s": 0,
+                "1s_to_3s": 0,
+                "3s_to_5s": 0,
+                "over_5s": 0
+            }
+        }
+        
+        log_file_path = Path("logs/ai_responses.log")
+        
+        if log_file_path.exists():
+            processing_times = []
+            
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Analyze recent logs
+            cutoff_time = datetime.now().timestamp() - (hours * 3600)
+            
+            for line in reversed(lines[-1000:]):  # Analyze last 1000 entries
+                try:
+                    log_data = json.loads(line.strip())
+                    
+                    # Check if log is within time range
+                    log_time = datetime.fromisoformat(log_data.get('timestamp', '').replace('Z', '+00:00'))
+                    if log_time.timestamp() < cutoff_time:
+                        continue
+                    
+                    if log_data.get('event_type') == 'ai_response':
+                        stats["total_responses"] += 1
+                        
+                        if log_data.get('success', True):
+                            stats["successful_responses"] += 1
+                        else:
+                            stats["failed_responses"] += 1
+                        
+                        # Processing time analysis
+                        proc_time = log_data.get('processing_time_ms', 0)
+                        if proc_time > 0:
+                            processing_times.append(proc_time)
+                            
+                            if proc_time < 1000:
+                                stats["response_time_distribution"]["under_1s"] += 1
+                            elif proc_time < 3000:
+                                stats["response_time_distribution"]["1s_to_3s"] += 1
+                            elif proc_time < 5000:
+                                stats["response_time_distribution"]["3s_to_5s"] += 1
+                            else:
+                                stats["response_time_distribution"]["over_5s"] += 1
+                        
+                        # Model usage
+                        model = log_data.get('model_used', 'unknown')
+                        stats["models_used"][model] = stats["models_used"].get(model, 0) + 1
+                        
+                        # Language usage
+                        language = log_data.get('language', 'unknown')
+                        stats["languages_used"][language] = stats["languages_used"].get(language, 0) + 1
+                        
+                        # Context analysis
+                        context = log_data.get('context')
+                        if context:
+                            stats["most_common_contexts"][context] = stats["most_common_contexts"].get(context, 0) + 1
+                
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    continue
+            
+            # Calculate averages
+            if processing_times:
+                stats["avg_processing_time_ms"] = round(sum(processing_times) / len(processing_times), 2)
+        
+        # Calculate success rate
+        success_rate = 0
+        if stats["total_responses"] > 0:
+            success_rate = round((stats["successful_responses"] / stats["total_responses"]) * 100, 2)
+        
+        stats["success_rate_percent"] = success_rate
+        stats["analysis_period_hours"] = hours
+        stats["timestamp"] = datetime.now().isoformat()
+        
+        logger.info("AI statistics generated", extra={
+            "request_id": request_id,
+            "total_responses": stats["total_responses"],
+            "success_rate": success_rate
+        })
+        
+        return stats
+        
+    except Exception as e:
+        error_tracker.log_external_api_error(e, "FileSystem", "ai_stats")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate AI statistics"
+        )

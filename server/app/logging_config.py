@@ -81,6 +81,59 @@ class SimpleConsoleFormatter(logging.Formatter):
         
         return " | ".join(log_parts)
 
+class AIConsoleFormatter(logging.Formatter):
+    """Special formatter for AI responses in console"""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        timestamp = datetime.fromtimestamp(record.created).strftime('%H:%M:%S')
+        
+        # Special formatting for AI response events
+        if hasattr(record, 'event_type'):
+            if record.event_type == 'ai_response':
+                # Format AI conversation with COMPLETE responses (no truncation)
+                user_msg = getattr(record, 'user_message', '')
+                ai_resp = getattr(record, 'ai_response', '')
+                model = getattr(record, 'model_used', 'unknown')
+                proc_time = getattr(record, 'processing_time_ms', 0)
+                user_id = getattr(record, 'user_id', 'unknown')
+                
+                return f"""
+{'='*80}
+🤖 AI CONVERSATION [{timestamp}]
+👤 User ({user_id}): {user_msg}
+{'='*80}
+🧠 AI Response ({model}, {proc_time:.1f}ms):
+{ai_resp}
+{'='*80}"""
+            
+            elif record.event_type == 'conversation_context':
+                context = getattr(record, 'context_used', [])
+                actions = getattr(record, 'suggested_actions', [])
+                topics = getattr(record, 'related_topics', [])
+                
+                return f"""
+📊 CONTEXT ANALYSIS [{timestamp}]
+🎯 Context: {', '.join(context)}
+💡 Actions: {', '.join(actions)}
+🔗 Topics: {', '.join(topics)}
+{'-'*50}"""
+            
+            elif record.event_type == 'ai_error':
+                error = getattr(record, 'error_message', '')
+                fallback = getattr(record, 'fallback_response', '')
+                
+                return f"""
+{'='*80}
+❌ AI ERROR [{timestamp}]
+� Errlor: {error}
+{'='*80}
+🔄 Fallback Response:
+{fallback}
+{'='*80}"""
+        
+        # Default formatting for other AI logs
+        return f"[AI-{record.levelname}] {timestamp} | {record.getMessage()}"
+
 def setup_logging(environment: str = "development") -> None:
     """
     Setup logging configuration based on environment
@@ -99,6 +152,9 @@ def setup_logging(environment: str = "development") -> None:
             },
             "console": {
                 "()": SimpleConsoleFormatter,
+            },
+            "ai_console": {
+                "()": AIConsoleFormatter,
             },
             "simple": {
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -138,6 +194,21 @@ def setup_logging(environment: str = "development") -> None:
                 "maxBytes": 10485760,  # 10MB
                 "backupCount": 10,
                 "encoding": "utf8",
+            },
+            "file_ai_responses": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "INFO",
+                "formatter": "json",
+                "filename": "logs/ai_responses.log",
+                "maxBytes": 10485760,  # 10MB
+                "backupCount": 20,  # Keep more AI response logs
+                "encoding": "utf8",
+            },
+            "console_ai": {
+                "class": "logging.StreamHandler",
+                "level": "INFO",
+                "formatter": "ai_console",
+                "stream": sys.stdout,
             }
         },
         "loggers": {
@@ -149,6 +220,11 @@ def setup_logging(environment: str = "development") -> None:
             "deep_shiva.access": {
                 "level": "INFO",
                 "handlers": ["file_access"],
+                "propagate": False,
+            },
+            "deep_shiva.ai_responses": {
+                "level": "INFO",
+                "handlers": ["console_ai", "file_ai_responses"],  # Use special AI console formatter
                 "propagate": False,
             },
             "uvicorn": {
@@ -192,6 +268,10 @@ def get_logger(name: str) -> logging.Logger:
 def get_access_logger() -> logging.Logger:
     """Get the access logger for request/response logging"""
     return logging.getLogger("deep_shiva.access")
+
+def get_ai_response_logger() -> logging.Logger:
+    """Get the AI response logger for tracking AI conversations"""
+    return logging.getLogger("deep_shiva.ai_responses")
 
 # Performance monitoring utilities
 class PerformanceLogger:
@@ -268,6 +348,134 @@ class ErrorTracker:
                 "error_message": str(error)
             },
             exc_info=True
+        )
+
+# AI Response logging utilities
+class AIResponseLogger:
+    """Utility class for logging AI responses and conversations"""
+    
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+    
+    def log_ai_response(
+        self,
+        user_id: str,
+        message_id: str,
+        user_message: str,
+        ai_response: str,
+        model_used: str,
+        processing_time_ms: float,
+        language: str = "en",
+        context: str = None,
+        success: bool = True,
+        request_id: str = None
+    ):
+        """Log AI response with full conversation context"""
+        
+        # Keep complete messages for logging (no truncation)
+        user_message_truncated = user_message
+        ai_response_truncated = ai_response
+        
+        self.logger.info(
+            "AI response generated",
+            extra={
+                "event_type": "ai_response",
+                "user_id": user_id,
+                "message_id": message_id,
+                "request_id": request_id,
+                "user_message": user_message_truncated,
+                "ai_response": ai_response_truncated,
+                "full_user_message_length": len(user_message),
+                "full_ai_response_length": len(ai_response),
+                "model_used": model_used,
+                "processing_time_ms": processing_time_ms,
+                "language": language,
+                "context": context,
+                "success": success,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        )
+    
+    def log_conversation_start(self, user_id: str, request_id: str = None):
+        """Log the start of a new conversation"""
+        self.logger.info(
+            "Conversation started",
+            extra={
+                "event_type": "conversation_start",
+                "user_id": user_id,
+                "request_id": request_id,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        )
+    
+    def log_conversation_context(
+        self,
+        user_id: str,
+        message_id: str,
+        context_used: list,
+        suggested_actions: list,
+        related_topics: list,
+        request_id: str = None
+    ):
+        """Log conversation context and suggestions"""
+        self.logger.info(
+            "Conversation context analyzed",
+            extra={
+                "event_type": "conversation_context",
+                "user_id": user_id,
+                "message_id": message_id,
+                "request_id": request_id,
+                "context_used": context_used,
+                "suggested_actions": suggested_actions,
+                "related_topics": related_topics,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        )
+    
+    def log_ai_error(
+        self,
+        user_id: str,
+        user_message: str,
+        error_message: str,
+        fallback_response: str,
+        model_attempted: str,
+        request_id: str = None
+    ):
+        """Log AI errors and fallback responses"""
+        self.logger.error(
+            "AI response failed, using fallback",
+            extra={
+                "event_type": "ai_error",
+                "user_id": user_id,
+                "request_id": request_id,
+                "user_message": user_message[:200] + "..." if len(user_message) > 200 else user_message,
+                "error_message": error_message,
+                "fallback_response": fallback_response[:300] + "..." if len(fallback_response) > 300 else fallback_response,
+                "model_attempted": model_attempted,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        )
+    
+    def log_model_performance(
+        self,
+        model_name: str,
+        avg_response_time_ms: float,
+        success_rate: float,
+        total_requests: int,
+        time_period: str = "1h"
+    ):
+        """Log model performance metrics"""
+        self.logger.info(
+            "Model performance metrics",
+            extra={
+                "event_type": "model_performance",
+                "model_name": model_name,
+                "avg_response_time_ms": avg_response_time_ms,
+                "success_rate": success_rate,
+                "total_requests": total_requests,
+                "time_period": time_period,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
         )
 
 # Security logging utilities

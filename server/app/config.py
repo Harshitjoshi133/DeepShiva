@@ -39,6 +39,16 @@ class Settings:
         
         # Database logging
         self.sqlalchemy_verbose = os.getenv("SQLALCHEMY_VERBOSE", "false").lower() == "true"
+        
+        # AI Logging
+        self.ai_logging_verbose = os.getenv("AI_LOGGING_VERBOSE", "true").lower() == "true"
+        
+        # Ollama Configuration
+        self.ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "gemma3:1b")
+        self.ollama_timeout = int(os.getenv("OLLAMA_TIMEOUT", "30"))
+        self.ollama_temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
+        self.ollama_max_tokens = int(os.getenv("OLLAMA_MAX_TOKENS", "1000"))
 
 # Global settings instance
 settings = Settings()
