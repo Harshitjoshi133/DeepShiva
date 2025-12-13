@@ -102,7 +102,7 @@ class AIConsoleFormatter(logging.Formatter):
 🤖 AI CONVERSATION [{timestamp}]
 👤 User ({user_id}): {user_msg}
 {'='*80}
-🧠 AI Response ({model}, {proc_time:.1f}ms):
+🧠 AI Response ({model}, {proc_time/1000:.1f}s):
 {ai_resp}
 {'='*80}"""
             

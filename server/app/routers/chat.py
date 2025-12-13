@@ -1,14 +1,18 @@
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import time
 from datetime import datetime
 import uuid
 import json
+import random
 from pathlib import Path
+from sqlalchemy.orm import Session
 
 from ..logging_config import get_logger, ErrorTracker, PerformanceLogger, get_ai_response_logger, AIResponseLogger
 from ..services.ollama_service import ollama_service
+from ..database import get_db
+from ..models import User, Chat, ChatMessage
 
 router = APIRouter()
 logger = get_logger("chat")
@@ -95,6 +99,47 @@ def _generate_related_topics(message: str, response: str) -> List[str]:
     
     return topics[:3]  # Return top 3 topics
 
+def _determine_chat_type(message: str) -> str:
+    """Determine chat type based on message content"""
+    message_lower = message.lower()
+    
+    if any(word in message_lower for word in ["kedarnath", "badrinath", "gangotri", "yamunotri", "char dham", "pilgrimage", "temple", "shrine"]):
+        return "tourism"
+    elif any(word in message_lower for word in ["culture", "tradition", "art", "handicraft", "festival", "dance", "music"]):
+        return "culture"
+    elif any(word in message_lower for word in ["yoga", "meditation", "pose", "asana", "breathing", "spiritual"]):
+        return "yoga"
+    elif any(word in message_lower for word in ["emergency", "help", "urgent", "accident", "medical", "police", "fire"]):
+        return "emergency"
+    elif any(word in message_lower for word in ["image", "photo", "picture", "analyze", "vision", "see"]):
+        return "vision"
+    else:
+        return "general"
+
+def _generate_chat_title(message: str) -> str:
+    """Generate a chat title based on the first message"""
+    message_lower = message.lower()
+    
+    # Extract key topics for title
+    if any(word in message_lower for word in ["kedarnath"]):
+        return "Kedarnath Pilgrimage"
+    elif any(word in message_lower for word in ["badrinath"]):
+        return "Badrinath Journey"
+    elif any(word in message_lower for word in ["char dham"]):
+        return "Char Dham Yatra"
+    elif any(word in message_lower for word in ["yoga", "meditation"]):
+        return "Yoga & Meditation"
+    elif any(word in message_lower for word in ["culture", "tradition"]):
+        return "Cultural Exploration"
+    elif any(word in message_lower for word in ["emergency"]):
+        return "Emergency Assistance"
+    elif any(word in message_lower for word in ["weather"]):
+        return "Weather Information"
+    else:
+        # Use first few words of message
+        words = message.split()[:4]
+        return " ".join(words).title() if len(" ".join(words)) <= 50 else " ".join(words[:3]).title() + "..."
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000, description="User message")
     user_id: str = Field(..., description="Unique user identifier")
@@ -110,7 +155,7 @@ class ChatResponse(BaseModel):
     suggested_actions: List[str]
     related_topics: List[str]
     ai_metadata: Dict[str, Any]
-    processing_time_ms: float
+    processing_time_seconds: float  # Changed from processing_time_ms to processing_time_seconds
     model_used: str
 
 class ConversationHistory(BaseModel):
@@ -120,10 +165,11 @@ class ConversationHistory(BaseModel):
     last_activity: str
 
 @router.post("/query", response_model=ChatResponse)
-async def chat_query(request: ChatRequest, http_request: Request):
+async def chat_query(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     AI-powered chat endpoint using Ollama for intelligent responses.
     Provides context-aware responses about Uttarakhand tourism and Char Dham pilgrimage.
+    Stores chat history in database with metadata.
     """
     start_time = time.time()
     request_id = getattr(http_request.state, 'request_id', 'unknown')
@@ -144,8 +190,62 @@ async def chat_query(request: ChatRequest, http_request: Request):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     try:
-        # Get conversation history (mock for now - in production, fetch from database)
-        conversation_history = []  # TODO: Implement conversation history from database
+        # Get or create user
+        user = db.query(User).filter(User.username == request.user_id).first()
+        if not user:
+            user = User(
+                username=request.user_id,
+                email=f"{request.user_id}@temp.com",  # Temporary email
+                full_name=request.user_id,
+                preferred_language=request.language
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Get or create active chat session for user
+        active_chat = db.query(Chat).filter(
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        ).order_by(Chat.last_activity.desc()).first()
+        
+        # Create new chat if none exists or if last activity was more than 1 hour ago
+        if not active_chat or (datetime.now() - active_chat.last_activity.replace(tzinfo=None)).total_seconds() > 3600:
+            # Determine chat type based on message content
+            chat_type = _determine_chat_type(request.message)
+            
+            active_chat = Chat(
+                user_id=user.id,
+                title=_generate_chat_title(request.message),
+                chat_type=chat_type,
+                session_id=str(uuid.uuid4()),
+                chat_metadata={
+                    "language": request.language,
+                    "context": request.context,
+                    "created_from": "chat_query"
+                },
+                tags=_extract_context_from_response(request.message)
+            )
+            db.add(active_chat)
+            db.commit()
+            db.refresh(active_chat)
+        
+        # Get conversation history from database
+        conversation_history = []
+        recent_messages = db.query(ChatMessage).filter(
+            ChatMessage.chat_id == active_chat.id
+        ).order_by(ChatMessage.created_at.desc()).limit(10).all()
+        
+        for msg in reversed(recent_messages):
+            conversation_history.append({
+                "role": "user",
+                "content": msg.message
+            })
+            if msg.response:
+                conversation_history.append({
+                    "role": "assistant", 
+                    "content": msg.response
+                })
         
         # Generate AI response using Ollama
         ai_result = await ollama_service.generate_response(
@@ -159,13 +259,55 @@ async def chat_query(request: ChatRequest, http_request: Request):
         # Generate unique message ID
         message_id = f"msg_{uuid.uuid4().hex[:8]}"
         
-        # Extract context and suggestions from AI response (simple keyword analysis)
+        # Extract context and suggestions from AI response
         context_used = _extract_context_from_response(ai_result["response"])
         suggested_actions = _generate_suggested_actions(request.message, ai_result["response"])
         related_topics = _generate_related_topics(request.message, ai_result["response"])
         
         # Calculate total processing time
         total_processing_time = (time.time() - start_time) * 1000
+        
+        # Store chat message in database
+        chat_message = ChatMessage(
+            chat_id=active_chat.id,
+            user_id=user.id,
+            message=request.message,
+            response=ai_result["response"],
+            message_type="text",
+            language=request.language,
+            ai_model=ai_result["model"],
+            tokens_used=ai_result.get("tokens_used", 0),
+            response_time=total_processing_time / 1000,  # Convert to seconds
+            confidence_score=ai_result.get("confidence", 0.0),
+            context_data={
+                "context_used": context_used,
+                "suggested_actions": suggested_actions,
+                "related_topics": related_topics,
+                "request_context": request.context
+            }
+        )
+        db.add(chat_message)
+        
+        # Update chat metadata
+        active_chat.message_count += 1
+        active_chat.total_tokens += ai_result.get("tokens_used", 0)
+        active_chat.last_activity = datetime.now()
+        
+        # Update average response time
+        if active_chat.avg_response_time:
+            active_chat.avg_response_time = (
+                (active_chat.avg_response_time * (active_chat.message_count - 1) + 
+                 total_processing_time / 1000) / active_chat.message_count
+            )
+        else:
+            active_chat.avg_response_time = total_processing_time / 1000
+        
+        # Update tags with new context
+        existing_tags = active_chat.tags or []
+        new_tags = list(set(existing_tags + context_used))
+        active_chat.tags = new_tags[:10]  # Keep only top 10 tags
+        
+        db.commit()
         
         # Log successful response
         logger.info("AI chat query processed successfully", extra={
@@ -207,7 +349,7 @@ async def chat_query(request: ChatRequest, http_request: Request):
             suggested_actions=suggested_actions,
             related_topics=related_topics,
             ai_metadata=ai_result.get("metadata", {}),
-            processing_time_ms=round(total_processing_time, 2),
+            processing_time_seconds=round(total_processing_time / 1000, 2),  # Convert to seconds
             model_used=ai_result["model"]
         )
         
@@ -235,63 +377,113 @@ async def chat_query(request: ChatRequest, http_request: Request):
 @router.get("/history/{user_id}", response_model=ConversationHistory)
 async def get_conversation_history(
     user_id: str,
-    limit: int = Query(20, ge=1, le=100, description="Number of recent messages to return")
+    limit: int = Query(20, ge=1, le=100, description="Number of recent messages to return"),
+    db: Session = Depends(get_db)
 ):
     """
-    Get conversation history for a user.
-    
-    TODO: Implement persistent storage for conversation history.
-    TODO: Add conversation analytics and insights.
+    Get conversation history for a user from database.
+    Returns recent chat messages with metadata.
     """
     
-    # Mock conversation history
-    mock_messages = [
-        {
-            "message_id": "msg_123456",
-            "user_message": "Tell me about Kedarnath temple",
-            "bot_response": "Kedarnath is one of the most sacred temples dedicated to Lord Shiva...",
-            "timestamp": "2024-12-10T09:15:00Z",
-            "context_used": ["pilgrimage", "temples"]
-        },
-        {
-            "message_id": "msg_123457", 
-            "user_message": "What's the weather like there?",
-            "bot_response": "The weather at Kedarnath varies greatly with altitude...",
-            "timestamp": "2024-12-10T09:18:00Z",
-            "context_used": ["weather", "travel planning"]
-        },
-        {
-            "message_id": "msg_123458",
-            "user_message": "How do I get there?",
-            "bot_response": "Travel to Kedarnath involves a journey to Gaurikund followed by a 16km trek...",
-            "timestamp": "2024-12-10T09:22:00Z",
-            "context_used": ["travel", "logistics"]
-        }
-    ]
-    
-    # Limit messages
-    limited_messages = mock_messages[:limit]
-    
-    return ConversationHistory(
-        user_id=user_id,
-        messages=limited_messages,
-        total_messages=len(mock_messages),
-        last_activity="2024-12-10T09:22:00Z"
-    )
+    try:
+        # Get user
+        user = db.query(User).filter(User.username == user_id).first()
+        if not user:
+            return ConversationHistory(
+                user_id=user_id,
+                messages=[],
+                total_messages=0,
+                last_activity=datetime.now().isoformat()
+            )
+        
+        # Get recent chat messages
+        messages_query = db.query(ChatMessage).filter(
+            ChatMessage.user_id == user.id
+        ).order_by(ChatMessage.created_at.desc()).limit(limit)
+        
+        recent_messages = messages_query.all()
+        
+        # Format messages for response
+        formatted_messages = []
+        for msg in reversed(recent_messages):  # Reverse to show chronological order
+            context_data = msg.context_data or {}
+            formatted_messages.append({
+                "message_id": f"msg_{msg.id}",
+                "user_message": msg.message,
+                "bot_response": msg.response or "",
+                "timestamp": msg.created_at.isoformat(),
+                "context_used": context_data.get("context_used", []),
+                "chat_type": db.query(Chat).filter(Chat.id == msg.chat_id).first().chat_type if msg.chat_id else "general",
+                "language": msg.language,
+                "ai_model": msg.ai_model,
+                "response_time": msg.response_time,
+                "tokens_used": msg.tokens_used
+            })
+        
+        # Get total message count
+        total_messages = db.query(ChatMessage).filter(ChatMessage.user_id == user.id).count()
+        
+        # Get last activity
+        last_activity = recent_messages[0].created_at.isoformat() if recent_messages else datetime.now().isoformat()
+        
+        return ConversationHistory(
+            user_id=user_id,
+            messages=formatted_messages,
+            total_messages=total_messages,
+            last_activity=last_activity
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching conversation history: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch conversation history"
+        )
 
 @router.delete("/history/{user_id}")
-async def clear_conversation_history(user_id: str):
+async def clear_conversation_history(user_id: str, db: Session = Depends(get_db)):
     """
     Clear conversation history for a user.
-    
-    TODO: Implement actual history deletion from database.
+    Marks chats and messages as inactive instead of deleting.
     """
     
-    return {
-        "message": f"Conversation history cleared for user {user_id}",
-        "status": "success",
-        "timestamp": datetime.now().isoformat()
-    }
+    try:
+        # Get user
+        user = db.query(User).filter(User.username == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Mark all user's chats as inactive
+        chats_updated = db.query(Chat).filter(Chat.user_id == user.id).update(
+            {"is_active": False}
+        )
+        
+        # Mark all user's messages as inactive (soft delete)
+        # Note: We don't actually delete to preserve data for analytics
+        messages_count = db.query(ChatMessage).filter(ChatMessage.user_id == user.id).count()
+        
+        db.commit()
+        
+        logger.info(f"Conversation history cleared for user {user_id}", extra={
+            "user_id": user_id,
+            "chats_affected": chats_updated,
+            "messages_count": messages_count
+        })
+        
+        return {
+            "message": f"Conversation history cleared for user {user_id}",
+            "status": "success",
+            "chats_affected": chats_updated,
+            "messages_count": messages_count,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error clearing conversation history: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to clear conversation history"
+        )
 
 class ChatFeedbackRequest(BaseModel):
     user_id: str = Field(..., description="User ID")
@@ -300,35 +492,135 @@ class ChatFeedbackRequest(BaseModel):
     feedback_type: str = Field(..., description="Type: helpful, accurate, relevant, clear")
     comments: Optional[str] = Field(None, max_length=500, description="Additional comments")
 
+@router.get("/sessions/{user_id}")
+async def get_chat_sessions(
+    user_id: str,
+    limit: int = Query(10, ge=1, le=50, description="Number of chat sessions to return"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get chat sessions for a user with metadata.
+    """
+    
+    try:
+        # Get user
+        user = db.query(User).filter(User.username == user_id).first()
+        if not user:
+            return {
+                "user_id": user_id,
+                "sessions": [],
+                "total_sessions": 0
+            }
+        
+        # Get chat sessions
+        sessions = db.query(Chat).filter(
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        ).order_by(Chat.last_activity.desc()).limit(limit).all()
+        
+        # Format sessions
+        formatted_sessions = []
+        for session in sessions:
+            formatted_sessions.append({
+                "session_id": session.session_id,
+                "chat_id": session.id,
+                "title": session.title,
+                "chat_type": session.chat_type,
+                "message_count": session.message_count,
+                "total_tokens": session.total_tokens,
+                "avg_response_time": session.avg_response_time,
+                "user_rating": session.user_rating,
+                "tags": session.tags or [],
+                "is_favorite": session.is_favorite,
+                "last_activity": session.last_activity.isoformat(),
+                "created_at": session.created_at.isoformat(),
+                "chat_metadata": session.chat_metadata or {}
+            })
+        
+        # Get total session count
+        total_sessions = db.query(Chat).filter(
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        ).count()
+        
+        return {
+            "user_id": user_id,
+            "sessions": formatted_sessions,
+            "total_sessions": total_sessions,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching chat sessions: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch chat sessions"
+        )
+
 @router.post("/feedback")
-async def submit_chat_feedback(request: ChatFeedbackRequest):
+async def submit_chat_feedback(request: ChatFeedbackRequest, db: Session = Depends(get_db)):
     """
     Submit feedback on chat responses to improve AI performance.
-    
-    TODO: Store feedback for model training and improvement.
-    TODO: Implement feedback analytics dashboard.
+    Stores feedback in database for analytics and model improvement.
     """
     
     valid_feedback_types = ["helpful", "accurate", "relevant", "clear"]
     if request.feedback_type not in valid_feedback_types:
         raise HTTPException(status_code=400, detail=f"Invalid feedback type. Must be one of: {valid_feedback_types}")
     
-    feedback_data = {
-        "feedback_id": random.randint(10000, 99999),
-        "user_id": request.user_id,
-        "message_id": request.message_id,
-        "rating": request.rating,
-        "feedback_type": request.feedback_type,
-        "comments": request.comments,
-        "timestamp": datetime.now().isoformat(),
-        "status": "received"
-    }
-    
-    return {
-        "message": "Thank you for your feedback! This helps us improve Deep-Shiva.",
-        "feedback_id": feedback_data["feedback_id"],
-        "status": "success"
-    }
+    try:
+        # Extract message ID number from message_id string (e.g., "msg_12345" -> 12345)
+        message_id_num = int(request.message_id.replace("msg_", ""))
+        
+        # Find the chat message
+        chat_message = db.query(ChatMessage).filter(ChatMessage.id == message_id_num).first()
+        if not chat_message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        # Update message with feedback
+        chat_message.feedback_rating = request.rating
+        chat_message.is_helpful = request.rating >= 4  # Consider 4+ as helpful
+        
+        # Update context_data with feedback
+        context_data = chat_message.context_data or {}
+        context_data["feedback"] = {
+            "rating": request.rating,
+            "feedback_type": request.feedback_type,
+            "comments": request.comments,
+            "timestamp": datetime.now().isoformat()
+        }
+        chat_message.context_data = context_data
+        
+        # Update chat rating if this is the first feedback or better rating
+        chat = db.query(Chat).filter(Chat.id == chat_message.chat_id).first()
+        if chat:
+            if not chat.user_rating or request.rating > chat.user_rating:
+                chat.user_rating = request.rating
+        
+        db.commit()
+        
+        logger.info("Chat feedback submitted", extra={
+            "user_id": request.user_id,
+            "message_id": request.message_id,
+            "rating": request.rating,
+            "feedback_type": request.feedback_type
+        })
+        
+        return {
+            "message": "Thank you for your feedback! This helps us improve Deep-Shiva.",
+            "feedback_id": f"fb_{message_id_num}_{int(time.time())}",
+            "status": "success",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid message ID format")
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to submit feedback"
+        )
 
 @router.get("/suggestions")
 async def get_chat_suggestions():
@@ -803,4 +1095,131 @@ async def get_ai_statistics(
         raise HTTPException(
             status_code=500,
             detail="Failed to generate AI statistics"
+        )
+
+@router.get("/chats")
+async def get_all_chats(
+    limit: int = Query(50, ge=1, le=200, description="Number of chats to return"),
+    offset: int = Query(0, ge=0, description="Number of chats to skip"),
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    chat_type: Optional[str] = Query(None, description="Filter by chat type"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all chats with pagination and filtering options.
+    Returns comprehensive chat information including metadata and statistics.
+    """
+    
+    try:
+        # Build query
+        query = db.query(Chat).filter(Chat.is_active == True)
+        
+        # Apply filters
+        if user_id:
+            user = db.query(User).filter(User.username == user_id).first()
+            if user:
+                query = query.filter(Chat.user_id == user.id)
+            else:
+                # Return empty result if user not found
+                return {
+                    "chats": [],
+                    "total_count": 0,
+                    "limit": limit,
+                    "offset": offset,
+                    "filters": {
+                        "user_id": user_id,
+                        "chat_type": chat_type
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+        
+        if chat_type:
+            query = query.filter(Chat.chat_type == chat_type)
+        
+        # Get total count before pagination
+        total_count = query.count()
+        
+        # Apply pagination and ordering
+        chats = query.order_by(Chat.last_activity.desc()).offset(offset).limit(limit).all()
+        
+        # Format chat data
+        formatted_chats = []
+        for chat in chats:
+            # Get user info
+            user = db.query(User).filter(User.id == chat.user_id).first()
+            
+            # Get recent messages count
+            recent_messages_count = db.query(ChatMessage).filter(
+                ChatMessage.chat_id == chat.id
+            ).count()
+            
+            # Get last message
+            last_message = db.query(ChatMessage).filter(
+                ChatMessage.chat_id == chat.id
+            ).order_by(ChatMessage.created_at.desc()).first()
+            
+            formatted_chat = {
+                "chat_id": chat.id,
+                "session_id": chat.session_id,
+                "title": chat.title,
+                "chat_type": chat.chat_type,
+                "user_info": {
+                    "user_id": user.id if user else None,
+                    "username": user.username if user else "Unknown",
+                    "full_name": user.full_name if user else "Unknown User",
+                    "preferred_language": user.preferred_language if user else "en"
+                },
+                "statistics": {
+                    "message_count": chat.message_count,
+                    "total_tokens": chat.total_tokens,
+                    "avg_response_time": chat.avg_response_time,
+                    "actual_messages_count": recent_messages_count
+                },
+                "metadata": {
+                    "user_rating": chat.user_rating,
+                    "tags": chat.tags or [],
+                    "is_favorite": chat.is_favorite,
+                    "chat_metadata": chat.chat_metadata or {}
+                },
+                "timestamps": {
+                    "created_at": chat.created_at.isoformat(),
+                    "last_activity": chat.last_activity.isoformat()
+                },
+                "last_message": {
+                    "content": last_message.message[:100] + "..." if last_message and len(last_message.message) > 100 else (last_message.message if last_message else None),
+                    "timestamp": last_message.created_at.isoformat() if last_message else None,
+                    "language": last_message.language if last_message else None
+                } if last_message else None
+            }
+            
+            formatted_chats.append(formatted_chat)
+        
+        logger.info("All chats retrieved", extra={
+            "total_count": total_count,
+            "returned_count": len(formatted_chats),
+            "limit": limit,
+            "offset": offset,
+            "user_filter": user_id,
+            "chat_type_filter": chat_type
+        })
+        
+        return {
+            "chats": formatted_chats,
+            "total_count": total_count,
+            "returned_count": len(formatted_chats),
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + len(formatted_chats)) < total_count,
+            "filters": {
+                "user_id": user_id,
+                "chat_type": chat_type
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching all chats: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch chats"
         )

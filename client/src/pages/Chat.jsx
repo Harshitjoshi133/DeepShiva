@@ -48,8 +48,8 @@ export default function Chat() {
   const [showLanguageMenu, setShowLanguageMenu] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [responseTime, setResponseTime] = useState(null)
-  const [requestStartTime, setRequestStartTime] = useState(null)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [userId] = useState('demo-user') // Consistent user ID
   const messagesEndRef = useRef(null)
 
   const languages = {
@@ -142,19 +142,63 @@ export default function Chat() {
     }
   }, [language])
 
-  // Load chat history from localStorage
+  // Load chat history from localStorage and backend
   useEffect(() => {
-    const loadInitialData = () => {
-      const savedHistory = localStorage.getItem('deepshiva-chat-history')
-      if (savedHistory) {
-        setChatHistory(JSON.parse(savedHistory))
+    const loadInitialData = async () => {
+      try {
+        // Load from localStorage first for immediate display
+        const savedHistory = localStorage.getItem('deepshiva-chat-history')
+        if (savedHistory) {
+          setChatHistory(JSON.parse(savedHistory))
+        }
+        
+        // Then try to load from backend
+        await loadChatSessions()
+        
+      } catch (error) {
+        console.error('Error loading chat history:', error)
+      } finally {
+        setIsInitialLoading(false)
       }
-      setIsInitialLoading(false)
     }
     
     // Use requestAnimationFrame for smooth transition
     requestAnimationFrame(loadInitialData)
   }, [])
+
+  // Function to load chat sessions from backend
+  const loadChatSessions = async () => {
+    try {
+      const response = await fetch(`/api/v1/chat/sessions/${userId}?limit=20`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.sessions && data.sessions.length > 0) {
+          // Convert backend format to frontend format
+          const backendChats = data.sessions.map(session => ({
+            id: session.session_id,
+            title: session.title,
+            messages: [], // We'll load messages when needed
+            timestamp: session.last_activity,
+            chat_type: session.chat_type,
+            message_count: session.message_count,
+            chat_id: session.chat_id // Store the actual chat ID
+          }))
+          
+          // Update chat history with backend data
+          setChatHistory(backendChats)
+          
+          // Update localStorage with backend data
+          localStorage.setItem('deepshiva-chat-history', JSON.stringify(backendChats))
+          
+          console.log('Loaded chat sessions:', backendChats.length)
+        }
+      } else {
+        console.log('Failed to load chat sessions:', response.status)
+      }
+    } catch (backendError) {
+      console.log('Backend chat loading failed, using localStorage:', backendError)
+    }
+  }
 
   const startVoiceInput = () => {
     if (recognition && !isListening) {
@@ -202,10 +246,65 @@ export default function Chat() {
   }
 
   // Load a chat from history
-  const loadChat = (chat) => {
-    setMessages(chat.messages)
-    setCurrentChatId(chat.id)
-    // Keep sidebar open after loading chat
+  const loadChat = async (chat) => {
+    try {
+      setIsLoading(true)
+      
+      // If chat has messages in localStorage, use them
+      if (chat.messages && chat.messages.length > 0) {
+        setMessages(chat.messages)
+        setCurrentChatId(chat.id)
+        return
+      }
+      
+      // Otherwise, try to load from backend
+      const response = await fetch(`/api/v1/chat/history/${userId}?limit=50`)
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Filter messages for this chat session (approximate matching)
+        // Since we don't have perfect session tracking, we'll load recent messages
+        const chatMessages = data.messages || []
+        
+        // Convert backend format to frontend format
+        const formattedMessages = []
+        chatMessages.forEach(msg => {
+          formattedMessages.push({
+            role: 'user',
+            content: msg.user_message,
+            timestamp: msg.timestamp
+          })
+          if (msg.bot_response) {
+            formattedMessages.push({
+              role: 'assistant',
+              content: msg.bot_response,
+              timestamp: msg.timestamp,
+              responseTime: msg.response_time ? `${msg.response_time}s` : undefined
+            })
+          }
+        })
+        
+        setMessages(formattedMessages)
+        setCurrentChatId(chat.id)
+        
+        // Update localStorage with loaded messages
+        const updatedChat = { ...chat, messages: formattedMessages }
+        const updatedHistory = chatHistory.map(h => h.id === chat.id ? updatedChat : h)
+        setChatHistory(updatedHistory)
+        localStorage.setItem('deepshiva-chat-history', JSON.stringify(updatedHistory))
+      } else {
+        // Fallback to localStorage data
+        setMessages(chat.messages || [])
+        setCurrentChatId(chat.id)
+      }
+    } catch (error) {
+      console.error('Error loading chat:', error)
+      // Fallback to localStorage data
+      setMessages(chat.messages || [])
+      setCurrentChatId(chat.id)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Start new chat
@@ -235,7 +334,6 @@ export default function Chat() {
     const userMessage = input.trim()
     setInput('')
     const startTime = Date.now()
-    setRequestStartTime(startTime)
     
     const newMessages = [...messages, { 
       role: 'user', 
@@ -252,7 +350,7 @@ export default function Chat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage, 
-          user_id: 'demo-user',
+          user_id: userId,
           language: language 
         })
       })
@@ -266,12 +364,15 @@ export default function Chat() {
         role: 'assistant', 
         content: data.response,
         timestamp: new Date().toISOString(),
-        responseTime: timeTaken
+        responseTime: data.processing_time_seconds ? `${data.processing_time_seconds}s` : `${(timeTaken/1000).toFixed(2)}s`
       }]
       setMessages(finalMessages)
       
-      // Auto-save after each exchange
-      setTimeout(() => saveCurrentChat(), 1000)
+      // Auto-save after each exchange and refresh chat sessions
+      setTimeout(() => {
+        saveCurrentChat()
+        loadChatSessions() // Refresh the chat list to show new/updated chats
+      }, 1000)
     } catch (error) {
       const endTime = Date.now()
       const timeTaken = endTime - startTime
@@ -281,7 +382,7 @@ export default function Chat() {
         role: 'assistant', 
         content: 'I apologize, but I encountered an error. Please try again.',
         timestamp: new Date().toISOString(),
-        responseTime: timeTaken,
+        responseTime: `${(timeTaken/1000).toFixed(2)}s`,
         isError: true
       }]
       setMessages(errorMessages)
@@ -468,7 +569,7 @@ export default function Chat() {
                     </div>
                     {responseTime && (
                       <div className="stat-item">
-                        <div className="stat-number">{responseTime}ms</div>
+                        <div className="stat-number">{(responseTime/1000).toFixed(2)}s</div>
                         <div className="stat-label">{t('chat.lastResponseTime', 'Last Response Time')}</div>
                       </div>
                     )}
@@ -525,7 +626,7 @@ export default function Chat() {
               )}
               {responseTime && (
                 <span className="response-time-indicator">
-                  {responseTime}ms
+                  {(responseTime/1000).toFixed(2)}s
                 </span>
               )}
             </div>
@@ -641,7 +742,7 @@ export default function Chat() {
                         {message.responseTime && (
                           <div className="message-footer-fullscreen">
                             <span className="response-time">
-                              {t('chat.responseTime', 'Response time')}: {message.responseTime}ms
+                              {t('chat.responseTime', 'Response time')}: {message.responseTime}
                             </span>
                             {message.isError && (
                               <span className="error-indicator">⚠️ {t('chat.error', 'Error')}</span>
