@@ -280,20 +280,20 @@ body {
 }
 
 .loading-icon {
-  @apply mb-6;
+  @apply mb-4;
 }
 
 .shiva-symbol-loading {
-  @apply text-8xl mb-4;
+  @apply text-4xl mb-3;
   animation: float-glow 3s ease-in-out infinite;
 }
 
 .loading-title {
-  @apply text-4xl font-bold gradient-text mb-4;
+  @apply text-2xl font-bold gradient-text mb-3;
 }
 
 .loading-subtitle {
-  @apply text-lg text-gray-600 mb-8;
+  @apply text-sm text-gray-600 mb-6;
 }
 
 .loading-spinner {
@@ -301,7 +301,7 @@ body {
 }
 
 .spinner-ring {
-  @apply w-3 h-3 rounded-full bg-saffron;
+  @apply w-2 h-2 rounded-full bg-saffron;
   animation: pulse-wave 1.5s ease-in-out infinite;
 }
 
@@ -341,7 +341,7 @@ body {
 }
 
 .chat-history-sidebar {
-  @apply w-80 bg-gray-50 border-r border-gray-200 flex flex-col shadow-xl relative z-50;
+  @apply w-72 bg-gray-50 border-r border-gray-200 flex flex-col shadow-xl relative z-50;
   height: 100vh;
   will-change: transform;
 }
@@ -353,15 +353,15 @@ body {
 }
 
 .sidebar-header {
-  @apply p-4 border-b border-gray-200 bg-white;
+  @apply p-3 border-b border-gray-200 bg-white;
 }
 
 .sidebar-header-top {
-  @apply flex items-center justify-between mb-3;
+  @apply flex items-center justify-between mb-2;
 }
 
 .sidebar-title {
-  @apply text-lg font-bold gradient-text;
+  @apply text-base font-bold gradient-text;
 }
 
 .sidebar-close-button {
@@ -373,7 +373,7 @@ body {
 }
 
 .sidebar-tab {
-  @apply flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors;
+  @apply flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors;
 }
 
 .sidebar-tab.active {
@@ -389,11 +389,11 @@ body {
 }
 
 .new-chat-section {
-  @apply p-4 border-b border-gray-200;
+  @apply p-3 border-b border-gray-200;
 }
 
 .new-chat-button {
-  @apply w-full px-4 py-3 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md;
+  @apply w-full px-3 py-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-sm;
 }
 
 .history-section {
@@ -401,27 +401,27 @@ body {
 }
 
 .section-title {
-  @apply px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100;
+  @apply px-3 py-2 text-xs font-semibold text-gray-700 bg-gray-100;
 }
 
 .history-list {
-  @apply flex-1 overflow-y-auto p-3;
+  @apply flex-1 overflow-y-auto p-2;
 }
 
 .no-history {
-  @apply text-center py-8 px-4;
+  @apply text-center py-6 px-3;
 }
 
 .no-history-text {
-  @apply text-gray-600 font-medium mb-2;
+  @apply text-gray-600 font-medium mb-1 text-sm;
 }
 
 .no-history-subtitle {
-  @apply text-gray-400 text-sm;
+  @apply text-gray-400 text-xs;
 }
 
 .about-content {
-  @apply flex-1 overflow-y-auto p-4 space-y-6;
+  @apply flex-1 overflow-y-auto p-3 space-y-4;
 }
 
 .about-section {
@@ -429,55 +429,55 @@ body {
 }
 
 .about-icon {
-  @apply text-4xl mb-3;
+  @apply text-2xl mb-2;
 }
 
 .about-title {
-  @apply text-xl font-bold gradient-text mb-3;
+  @apply text-base font-bold gradient-text mb-2;
 }
 
 .about-description {
-  @apply text-gray-600 leading-relaxed;
+  @apply text-gray-600 leading-relaxed text-sm;
 }
 
 .features-section {
-  @apply space-y-3;
-}
-
-.features-title {
-  @apply text-lg font-semibold text-gray-800 mb-3;
-}
-
-.features-list {
   @apply space-y-2;
 }
 
+.features-title {
+  @apply text-sm font-semibold text-gray-800 mb-2;
+}
+
+.features-list {
+  @apply space-y-1;
+}
+
 .feature-item {
-  @apply flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors;
+  @apply flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors;
 }
 
 .feature-icon {
-  @apply text-lg;
+  @apply text-sm;
 }
 
 .stats-section {
-  @apply space-y-3;
+  @apply space-y-2;
 }
 
 .stats-title {
-  @apply text-lg font-semibold text-gray-800 mb-3;
+  @apply text-sm font-semibold text-gray-800 mb-2;
 }
 
 .stats-grid {
-  @apply grid grid-cols-2 gap-3;
+  @apply grid grid-cols-2 gap-2;
 }
 
 .stat-item {
-  @apply bg-white p-3 rounded-lg border border-gray-200 text-center;
+  @apply bg-white p-2 rounded-lg border border-gray-200 text-center;
 }
 
 .stat-number {
-  @apply text-lg font-bold text-saffron;
+  @apply text-sm font-bold text-saffron;
 }
 
 .stat-label {
@@ -485,21 +485,19 @@ body {
 }
 
 .history-item {
-  @apply flex items-center gap-2 mb-2;
+  @apply flex items-center gap-1 mb-1;
 }
 
 .history-item-button {
-  @apply flex-1 p-3 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
+  @apply flex-1 p-2 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
 }
 
 .history-item-button.active {
   @apply border-saffron bg-orange-50;
 }
 
-
-
 .history-item-title {
-  @apply text-sm font-medium text-gray-800 truncate;
+  @apply text-xs font-medium text-gray-800 truncate;
 }
 
 .history-item-date {
@@ -507,7 +505,7 @@ body {
 }
 
 .delete-chat-button {
-  @apply p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors;
+  @apply p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors;
 }
 
 .chatgpt-fullscreen-container {
@@ -516,11 +514,11 @@ body {
 }
 
 .chatgpt-topbar {
-  @apply flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200 shadow-sm;
+  @apply flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm;
 }
 
 .topbar-left {
-  @apply flex items-center gap-4;
+  @apply flex items-center gap-3;
 }
 
 .sidebar-toggle-button {
@@ -535,10 +533,8 @@ body {
   @apply absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs text-gray-400 bg-gray-800 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap;
 }
 
-
-
 .topbar-divider {
-  @apply w-px h-6 bg-gray-300;
+  @apply w-px h-5 bg-gray-300;
 }
 
 .back-button {
@@ -546,27 +542,27 @@ body {
 }
 
 .back-text {
-  @apply text-sm font-medium hidden sm:block;
+  @apply text-xs font-medium hidden sm:block;
 }
 
 .chat-title {
-  @apply flex items-center gap-3;
+  @apply flex items-center gap-2;
 }
 
 .title-icon {
-  @apply text-2xl;
+  @apply text-lg;
 }
 
 .title-text {
-  @apply text-xl font-bold gradient-text;
+  @apply text-base font-bold gradient-text;
 }
 
 .topbar-right {
-  @apply flex items-center gap-4;
+  @apply flex items-center gap-3;
 }
 
 .chat-status {
-  @apply flex items-center gap-3 text-sm;
+  @apply flex items-center gap-2 text-xs;
 }
 
 .current-chat-indicator {
@@ -582,15 +578,15 @@ body {
 }
 
 .language-button {
-  @apply flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-saffron hover:bg-gray-100 rounded-lg transition-colors;
+  @apply flex items-center gap-1 px-2 py-1 text-gray-600 hover:text-saffron hover:bg-gray-100 rounded-lg transition-colors text-xs;
 }
 
 .language-dropdown {
-  @apply absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-32 z-50;
+  @apply absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-28 z-50;
 }
 
 .language-option {
-  @apply w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors;
+  @apply w-full px-2 py-1 text-left text-gray-700 hover:bg-gray-100 transition-colors text-xs;
 }
 
 .language-option.active {
@@ -602,40 +598,40 @@ body {
 }
 
 .chatgpt-welcome-fullscreen {
-  @apply flex items-center justify-center h-full p-8;
+  @apply flex items-center justify-center h-full p-4;
 }
 
 .welcome-content-fullscreen {
-  @apply text-center max-w-4xl mx-auto;
+  @apply text-center max-w-3xl mx-auto;
 }
 
 .welcome-icon-fullscreen {
-  @apply mb-8;
+  @apply mb-4;
 }
 
 .shiva-symbol-fullscreen {
-  @apply text-8xl mb-6 animate-pulse;
-  filter: drop-shadow(0 0 30px rgba(255, 153, 51, 0.4));
+  @apply text-4xl mb-3 animate-pulse;
+  filter: drop-shadow(0 0 20px rgba(255, 153, 51, 0.4));
 }
 
 .welcome-title-fullscreen {
-  @apply text-5xl font-bold mb-6 gradient-text;
+  @apply text-2xl font-bold mb-3 gradient-text;
 }
 
 .welcome-subtitle-fullscreen {
-  @apply text-xl text-gray-600 mb-12 leading-relaxed max-w-3xl mx-auto;
+  @apply text-sm text-gray-600 mb-6 leading-relaxed max-w-2xl mx-auto;
 }
 
 .welcome-suggestions-fullscreen {
-  @apply grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto;
+  @apply grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto;
 }
 
 .suggestion-card-fullscreen {
-  @apply p-6 bg-gradient-to-r from-orange-50 to-green-50 border border-orange-200 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 hover:border-saffron;
+  @apply p-3 bg-gradient-to-r from-orange-50 to-green-50 border border-orange-200 rounded-lg cursor-pointer transition-all duration-300 hover:shadow-md hover:scale-105 hover:border-saffron;
 }
 
 .suggestion-card-fullscreen span {
-  @apply text-base font-medium text-gray-700;
+  @apply text-sm font-medium text-gray-700;
 }
 
 .chatgpt-conversation-fullscreen {
@@ -655,11 +651,11 @@ body {
 }
 
 .message-content-fullscreen {
-  @apply max-w-5xl mx-auto px-8 py-8 flex gap-6;
+  @apply max-w-4xl mx-auto px-4 py-4 flex gap-3;
 }
 
 .message-avatar-fullscreen {
-  @apply w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 shadow-lg;
+  @apply w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 shadow-md;
 }
 
 .user-avatar {
@@ -671,7 +667,7 @@ body {
 }
 
 .message-bubble-fullscreen {
-  @apply flex-1 min-w-0 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md;
+  @apply flex-1 min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md;
 }
 
 .message-wrapper-fullscreen.user .message-bubble-fullscreen {
@@ -683,11 +679,11 @@ body {
 }
 
 .message-header-fullscreen {
-  @apply flex items-center justify-between px-4 py-2 bg-white bg-opacity-50 border-b border-gray-200;
+  @apply flex items-center justify-between px-3 py-2 bg-white bg-opacity-50 border-b border-gray-200;
 }
 
 .message-sender {
-  @apply font-semibold text-gray-800;
+  @apply font-semibold text-gray-800 text-sm;
 }
 
 .message-time {
@@ -695,11 +691,11 @@ body {
 }
 
 .message-text-fullscreen {
-  @apply p-4;
+  @apply p-3;
 }
 
 .message-footer-fullscreen {
-  @apply px-4 py-2 bg-white bg-opacity-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500;
+  @apply px-3 py-2 bg-white bg-opacity-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500;
 }
 
 .response-time {
@@ -711,39 +707,39 @@ body {
 }
 
 .chatgpt-markdown-fullscreen {
-  @apply text-gray-800 leading-relaxed text-base;
+  @apply text-gray-800 leading-relaxed text-sm;
 }
 
 .chatgpt-markdown-fullscreen p {
-  @apply mb-4 last:mb-0;
+  @apply mb-3 last:mb-0;
 }
 
 .chatgpt-markdown-fullscreen h1, .chatgpt-markdown-fullscreen h2, .chatgpt-markdown-fullscreen h3 {
-  @apply font-bold gradient-text mb-3;
+  @apply font-bold gradient-text mb-2;
 }
 
 .chatgpt-markdown-fullscreen h1 {
-  @apply text-2xl;
-}
-
-.chatgpt-markdown-fullscreen h2 {
-  @apply text-xl;
-}
-
-.chatgpt-markdown-fullscreen h3 {
   @apply text-lg;
 }
 
+.chatgpt-markdown-fullscreen h2 {
+  @apply text-base;
+}
+
+.chatgpt-markdown-fullscreen h3 {
+  @apply text-sm;
+}
+
 .chatgpt-markdown-fullscreen ul, .chatgpt-markdown-fullscreen ol {
-  @apply mb-4 pl-6;
+  @apply mb-3 pl-4;
 }
 
 .chatgpt-markdown-fullscreen li {
-  @apply mb-2;
+  @apply mb-1;
 }
 
 .chatgpt-markdown-fullscreen blockquote {
-  @apply border-l-4 border-saffron pl-6 italic text-gray-600 mb-4;
+  @apply border-l-4 border-saffron pl-4 italic text-gray-600 mb-3;
 }
 
 .chatgpt-link-fullscreen {
@@ -751,11 +747,11 @@ body {
 }
 
 .chatgpt-code-fullscreen {
-  @apply bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm font-mono;
+  @apply bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-mono;
 }
 
 .chatgpt-pre-fullscreen {
-  @apply bg-gray-100 text-gray-800 p-4 rounded-lg overflow-x-auto mb-4;
+  @apply bg-gray-100 text-gray-800 p-3 rounded-lg overflow-x-auto mb-3;
 }
 
 .chatgpt-pre-fullscreen code {
@@ -763,15 +759,15 @@ body {
 }
 
 .typing-indicator-fullscreen {
-  @apply flex items-center text-gray-600;
+  @apply flex items-center text-gray-600 text-sm;
 }
 
 .chatgpt-input-area-fullscreen {
-  @apply p-6 border-t border-gray-200 bg-white;
+  @apply p-4 border-t border-gray-200 bg-white;
 }
 
 .voice-indicator {
-  @apply flex items-center justify-center gap-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg;
+  @apply flex items-center justify-center gap-2 mb-3 p-2 bg-red-50 border border-red-200 rounded-lg;
 }
 
 .voice-wave {
@@ -779,7 +775,7 @@ body {
 }
 
 .voice-wave span {
-  @apply w-1 h-4 bg-red-500 rounded-full;
+  @apply w-1 h-3 bg-red-500 rounded-full;
   animation: voice-wave 1.2s ease-in-out infinite;
 }
 
@@ -792,32 +788,32 @@ body {
 }
 
 .voice-text {
-  @apply text-red-600 font-medium;
+  @apply text-red-600 font-medium text-sm;
 }
 
 @keyframes voice-wave {
-  0%, 100% { height: 1rem; }
-  50% { height: 1.5rem; }
+  0%, 100% { height: 0.75rem; }
+  50% { height: 1rem; }
 }
 
 .chatgpt-input-form-fullscreen {
-  @apply max-w-5xl mx-auto;
+  @apply max-w-4xl mx-auto;
 }
 
 .input-container-fullscreen {
-  @apply relative flex items-center bg-white border-2 border-gray-300 rounded-2xl shadow-sm focus-within:border-saffron focus-within:shadow-lg transition-all duration-200 hover:shadow-md;
+  @apply relative flex items-center bg-white border-2 border-gray-300 rounded-xl shadow-sm focus-within:border-saffron focus-within:shadow-lg transition-all duration-200 hover:shadow-md;
 }
 
 .chatgpt-input-fullscreen {
-  @apply flex-1 px-6 py-4 bg-transparent border-none outline-none text-gray-800 placeholder-gray-500 text-lg;
+  @apply flex-1 px-4 py-3 bg-transparent border-none outline-none text-gray-800 placeholder-gray-500 text-sm;
 }
 
 .input-actions-fullscreen {
-  @apply flex items-center gap-3 pr-4;
+  @apply flex items-center gap-2 pr-3;
 }
 
 .voice-button-fullscreen {
-  @apply p-3 text-gray-500 hover:text-saffron transition-all duration-200 rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply p-2 text-gray-500 hover:text-saffron transition-all duration-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .voice-button-fullscreen.listening {
@@ -825,6 +821,6 @@ body {
 }
 
 .send-button-fullscreen {
-  @apply p-3 bg-saffron text-white rounded-xl hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg;
+  @apply p-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg;
 }
 
