@@ -87,3 +87,744 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, #e6851f, #1e7a1e);
 }
+
+/* ChatGPT-style Chat Interface */
+.chatgpt-container {
+  @apply bg-white rounded-xl border border-gray-200 shadow-xl;
+  max-height: calc(100vh - 120px);
+}
+
+.chatgpt-header {
+  @apply px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50;
+}
+
+.chatgpt-messages {
+  @apply flex-1 overflow-y-auto;
+}
+
+.chatgpt-welcome {
+  @apply flex items-center justify-center h-full p-8;
+}
+
+.welcome-content {
+  @apply text-center max-w-2xl mx-auto;
+}
+
+.welcome-icon {
+  @apply mb-6;
+}
+
+.shiva-symbol {
+  @apply text-6xl mb-4 animate-pulse;
+  filter: drop-shadow(0 0 20px rgba(255, 153, 51, 0.3));
+}
+
+.welcome-title {
+  @apply text-4xl font-bold mb-4;
+}
+
+.welcome-subtitle {
+  @apply text-lg text-gray-600 mb-8 leading-relaxed;
+}
+
+.welcome-suggestions {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto;
+}
+
+.suggestion-card {
+  @apply p-4 bg-gradient-to-r from-orange-50 to-green-50 border border-orange-200 rounded-lg cursor-pointer transition-all duration-300 hover:shadow-md hover:scale-105 hover:border-saffron;
+}
+
+.suggestion-card span {
+  @apply text-sm font-medium text-gray-700;
+}
+
+.chatgpt-conversation {
+  @apply space-y-0;
+}
+
+.message-wrapper {
+  @apply w-full;
+}
+
+.message-wrapper.user {
+  @apply bg-gray-50;
+}
+
+.message-wrapper.assistant {
+  @apply bg-white;
+}
+
+.message-content {
+  @apply max-w-4xl mx-auto px-6 py-6 flex gap-4;
+}
+
+.message-avatar {
+  @apply w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 bg-gradient-to-r from-saffron to-forest text-white shadow-md;
+}
+
+.message-text {
+  @apply flex-1 min-w-0;
+}
+
+.chatgpt-markdown {
+  @apply text-gray-800 leading-relaxed;
+}
+
+.chatgpt-markdown p {
+  @apply mb-3 last:mb-0;
+}
+
+.chatgpt-markdown h1, .chatgpt-markdown h2, .chatgpt-markdown h3 {
+  @apply font-bold gradient-text mb-2;
+}
+
+.chatgpt-markdown h1 {
+  @apply text-xl;
+}
+
+.chatgpt-markdown h2 {
+  @apply text-lg;
+}
+
+.chatgpt-markdown h3 {
+  @apply text-base;
+}
+
+.chatgpt-markdown ul, .chatgpt-markdown ol {
+  @apply mb-3 pl-4;
+}
+
+.chatgpt-markdown li {
+  @apply mb-1;
+}
+
+.chatgpt-markdown blockquote {
+  @apply border-l-4 border-saffron pl-4 italic text-gray-600 mb-3;
+}
+
+.chatgpt-link {
+  @apply text-saffron hover:text-orange-600 underline font-medium transition-colors duration-200;
+}
+
+.chatgpt-link:hover {
+  @apply shadow-sm;
+}
+
+.chatgpt-code {
+  @apply bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm font-mono;
+}
+
+.chatgpt-pre {
+  @apply bg-gray-100 text-gray-800 p-4 rounded-lg overflow-x-auto mb-3;
+}
+
+.chatgpt-pre code {
+  @apply bg-transparent p-0;
+}
+
+.typing-indicator {
+  @apply flex items-center text-gray-600;
+}
+
+.chatgpt-input-area {
+  @apply p-4 border-t border-gray-200 bg-white;
+}
+
+.chatgpt-input-form {
+  @apply max-w-4xl mx-auto;
+}
+
+.input-container {
+  @apply relative flex items-center bg-white border-2 border-gray-300 rounded-xl shadow-sm focus-within:border-saffron focus-within:shadow-md transition-all duration-200;
+}
+
+.chatgpt-input {
+  @apply flex-1 px-4 py-3 bg-transparent border-none outline-none text-gray-800 placeholder-gray-500 text-base;
+}
+
+.input-actions {
+  @apply flex items-center gap-2 pr-2;
+}
+
+.voice-button {
+  @apply p-2 text-gray-500 hover:text-saffron transition-colors duration-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.voice-button.listening {
+  @apply text-red-500 bg-red-50 animate-pulse;
+}
+
+.send-button {
+  @apply p-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-md;
+}
+
+.send-button:not(:disabled):hover {
+  @apply scale-105;
+}
+
+/* Full-Screen Chat Interface */
+.fullscreen-chat {
+  @apply fixed inset-0 bg-white flex;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+/* Initial Loading Screen */
+.initial-loading-screen {
+  @apply w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-green-50;
+}
+
+.loading-content {
+  @apply text-center;
+}
+
+.loading-icon {
+  @apply mb-6;
+}
+
+.shiva-symbol-loading {
+  @apply text-8xl mb-4;
+  animation: float-glow 3s ease-in-out infinite;
+}
+
+.loading-title {
+  @apply text-4xl font-bold gradient-text mb-4;
+}
+
+.loading-subtitle {
+  @apply text-lg text-gray-600 mb-8;
+}
+
+.loading-spinner {
+  @apply flex justify-center items-center gap-2;
+}
+
+.spinner-ring {
+  @apply w-3 h-3 rounded-full bg-saffron;
+  animation: pulse-wave 1.5s ease-in-out infinite;
+}
+
+.spinner-ring:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.spinner-ring:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+@keyframes float-glow {
+  0%, 100% { 
+    transform: translateY(0px);
+    filter: drop-shadow(0 0 20px rgba(255, 153, 51, 0.3));
+  }
+  50% { 
+    transform: translateY(-10px);
+    filter: drop-shadow(0 0 30px rgba(255, 153, 51, 0.6));
+  }
+}
+
+@keyframes pulse-wave {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.sidebar-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+  backdrop-filter: blur(2px);
+}
+
+.chat-history-sidebar {
+  @apply w-80 bg-gray-50 border-r border-gray-200 flex flex-col shadow-xl relative z-50;
+  height: 100vh;
+  will-change: transform;
+}
+
+@media (max-width: 768px) {
+  .chat-history-sidebar {
+    @apply fixed left-0 top-0 z-50;
+  }
+}
+
+.sidebar-header {
+  @apply p-4 border-b border-gray-200 bg-white;
+}
+
+.sidebar-header-top {
+  @apply flex items-center justify-between mb-3;
+}
+
+.sidebar-title {
+  @apply text-lg font-bold gradient-text;
+}
+
+.sidebar-close-button {
+  @apply p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors;
+}
+
+.sidebar-tabs {
+  @apply flex bg-gray-100 rounded-lg p-1;
+}
+
+.sidebar-tab {
+  @apply flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors;
+}
+
+.sidebar-tab.active {
+  @apply bg-white text-saffron shadow-sm;
+}
+
+.sidebar-tab:not(.active) {
+  @apply text-gray-600 hover:text-gray-800;
+}
+
+.chat-history-content {
+  @apply flex-1 flex flex-col overflow-hidden;
+}
+
+.new-chat-section {
+  @apply p-4 border-b border-gray-200;
+}
+
+.new-chat-button {
+  @apply w-full px-4 py-3 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md;
+}
+
+.history-section {
+  @apply flex-1 overflow-hidden flex flex-col;
+}
+
+.section-title {
+  @apply px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100;
+}
+
+.history-list {
+  @apply flex-1 overflow-y-auto p-3;
+}
+
+.no-history {
+  @apply text-center py-8 px-4;
+}
+
+.no-history-text {
+  @apply text-gray-600 font-medium mb-2;
+}
+
+.no-history-subtitle {
+  @apply text-gray-400 text-sm;
+}
+
+.about-content {
+  @apply flex-1 overflow-y-auto p-4 space-y-6;
+}
+
+.about-section {
+  @apply text-center;
+}
+
+.about-icon {
+  @apply text-4xl mb-3;
+}
+
+.about-title {
+  @apply text-xl font-bold gradient-text mb-3;
+}
+
+.about-description {
+  @apply text-gray-600 leading-relaxed;
+}
+
+.features-section {
+  @apply space-y-3;
+}
+
+.features-title {
+  @apply text-lg font-semibold text-gray-800 mb-3;
+}
+
+.features-list {
+  @apply space-y-2;
+}
+
+.feature-item {
+  @apply flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors;
+}
+
+.feature-icon {
+  @apply text-lg;
+}
+
+.stats-section {
+  @apply space-y-3;
+}
+
+.stats-title {
+  @apply text-lg font-semibold text-gray-800 mb-3;
+}
+
+.stats-grid {
+  @apply grid grid-cols-2 gap-3;
+}
+
+.stat-item {
+  @apply bg-white p-3 rounded-lg border border-gray-200 text-center;
+}
+
+.stat-number {
+  @apply text-lg font-bold text-saffron;
+}
+
+.stat-label {
+  @apply text-xs text-gray-600 mt-1;
+}
+
+.history-item {
+  @apply flex items-center gap-2 mb-2;
+}
+
+.history-item-button {
+  @apply flex-1 p-3 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
+}
+
+.history-item-button.active {
+  @apply border-saffron bg-orange-50;
+}
+
+
+
+.history-item-title {
+  @apply text-sm font-medium text-gray-800 truncate;
+}
+
+.history-item-date {
+  @apply text-xs text-gray-500 mt-1;
+}
+
+.delete-chat-button {
+  @apply p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors;
+}
+
+.chatgpt-fullscreen-container {
+  @apply flex-1 flex flex-col;
+  height: 100vh;
+}
+
+.chatgpt-topbar {
+  @apply flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200 shadow-sm;
+}
+
+.topbar-left {
+  @apply flex items-center gap-4;
+}
+
+.sidebar-toggle-button {
+  @apply relative p-2 text-gray-600 hover:text-saffron hover:bg-gray-100 rounded-lg transition-all duration-200 border border-transparent;
+}
+
+.sidebar-toggle-button.active {
+  @apply text-saffron bg-orange-50 border-orange-200;
+}
+
+.toggle-hint {
+  @apply absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs text-gray-400 bg-gray-800 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap;
+}
+
+
+
+.topbar-divider {
+  @apply w-px h-6 bg-gray-300;
+}
+
+.back-button {
+  @apply flex items-center gap-2 p-2 text-gray-600 hover:text-saffron hover:bg-gray-100 rounded-lg transition-colors;
+}
+
+.back-text {
+  @apply text-sm font-medium hidden sm:block;
+}
+
+.chat-title {
+  @apply flex items-center gap-3;
+}
+
+.title-icon {
+  @apply text-2xl;
+}
+
+.title-text {
+  @apply text-xl font-bold gradient-text;
+}
+
+.topbar-right {
+  @apply flex items-center gap-4;
+}
+
+.chat-status {
+  @apply flex items-center gap-3 text-sm;
+}
+
+.current-chat-indicator {
+  @apply px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium;
+}
+
+.response-time-indicator {
+  @apply px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-mono;
+}
+
+.language-selector {
+  @apply relative;
+}
+
+.language-button {
+  @apply flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-saffron hover:bg-gray-100 rounded-lg transition-colors;
+}
+
+.language-dropdown {
+  @apply absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-32 z-50;
+}
+
+.language-option {
+  @apply w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-100 transition-colors;
+}
+
+.language-option.active {
+  @apply bg-saffron text-white;
+}
+
+.chatgpt-messages-fullscreen {
+  @apply flex-1 overflow-y-auto;
+}
+
+.chatgpt-welcome-fullscreen {
+  @apply flex items-center justify-center h-full p-8;
+}
+
+.welcome-content-fullscreen {
+  @apply text-center max-w-4xl mx-auto;
+}
+
+.welcome-icon-fullscreen {
+  @apply mb-8;
+}
+
+.shiva-symbol-fullscreen {
+  @apply text-8xl mb-6 animate-pulse;
+  filter: drop-shadow(0 0 30px rgba(255, 153, 51, 0.4));
+}
+
+.welcome-title-fullscreen {
+  @apply text-5xl font-bold mb-6 gradient-text;
+}
+
+.welcome-subtitle-fullscreen {
+  @apply text-xl text-gray-600 mb-12 leading-relaxed max-w-3xl mx-auto;
+}
+
+.welcome-suggestions-fullscreen {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto;
+}
+
+.suggestion-card-fullscreen {
+  @apply p-6 bg-gradient-to-r from-orange-50 to-green-50 border border-orange-200 rounded-xl cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 hover:border-saffron;
+}
+
+.suggestion-card-fullscreen span {
+  @apply text-base font-medium text-gray-700;
+}
+
+.chatgpt-conversation-fullscreen {
+  @apply space-y-0;
+}
+
+.message-wrapper-fullscreen {
+  @apply w-full;
+}
+
+.message-wrapper-fullscreen.user {
+  @apply bg-gray-50;
+}
+
+.message-wrapper-fullscreen.assistant {
+  @apply bg-white;
+}
+
+.message-content-fullscreen {
+  @apply max-w-5xl mx-auto px-8 py-8 flex gap-6;
+}
+
+.message-avatar-fullscreen {
+  @apply w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 shadow-lg;
+}
+
+.user-avatar {
+  @apply w-full h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white flex items-center justify-center;
+}
+
+.assistant-avatar {
+  @apply w-full h-full rounded-full bg-gradient-to-r from-saffron to-forest text-white flex items-center justify-center;
+}
+
+.message-bubble-fullscreen {
+  @apply flex-1 min-w-0 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md;
+}
+
+.message-wrapper-fullscreen.user .message-bubble-fullscreen {
+  @apply bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200;
+}
+
+.message-wrapper-fullscreen.assistant .message-bubble-fullscreen {
+  @apply bg-gradient-to-r from-orange-50 to-green-50 border-orange-200;
+}
+
+.message-header-fullscreen {
+  @apply flex items-center justify-between px-4 py-2 bg-white bg-opacity-50 border-b border-gray-200;
+}
+
+.message-sender {
+  @apply font-semibold text-gray-800;
+}
+
+.message-time {
+  @apply text-xs text-gray-500;
+}
+
+.message-text-fullscreen {
+  @apply p-4;
+}
+
+.message-footer-fullscreen {
+  @apply px-4 py-2 bg-white bg-opacity-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500;
+}
+
+.response-time {
+  @apply font-mono;
+}
+
+.error-indicator {
+  @apply text-red-500 font-medium;
+}
+
+.chatgpt-markdown-fullscreen {
+  @apply text-gray-800 leading-relaxed text-base;
+}
+
+.chatgpt-markdown-fullscreen p {
+  @apply mb-4 last:mb-0;
+}
+
+.chatgpt-markdown-fullscreen h1, .chatgpt-markdown-fullscreen h2, .chatgpt-markdown-fullscreen h3 {
+  @apply font-bold gradient-text mb-3;
+}
+
+.chatgpt-markdown-fullscreen h1 {
+  @apply text-2xl;
+}
+
+.chatgpt-markdown-fullscreen h2 {
+  @apply text-xl;
+}
+
+.chatgpt-markdown-fullscreen h3 {
+  @apply text-lg;
+}
+
+.chatgpt-markdown-fullscreen ul, .chatgpt-markdown-fullscreen ol {
+  @apply mb-4 pl-6;
+}
+
+.chatgpt-markdown-fullscreen li {
+  @apply mb-2;
+}
+
+.chatgpt-markdown-fullscreen blockquote {
+  @apply border-l-4 border-saffron pl-6 italic text-gray-600 mb-4;
+}
+
+.chatgpt-link-fullscreen {
+  @apply text-saffron hover:text-orange-600 underline font-medium transition-colors duration-200 hover:shadow-sm;
+}
+
+.chatgpt-code-fullscreen {
+  @apply bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm font-mono;
+}
+
+.chatgpt-pre-fullscreen {
+  @apply bg-gray-100 text-gray-800 p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.chatgpt-pre-fullscreen code {
+  @apply bg-transparent p-0;
+}
+
+.typing-indicator-fullscreen {
+  @apply flex items-center text-gray-600;
+}
+
+.chatgpt-input-area-fullscreen {
+  @apply p-6 border-t border-gray-200 bg-white;
+}
+
+.voice-indicator {
+  @apply flex items-center justify-center gap-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg;
+}
+
+.voice-wave {
+  @apply flex items-center gap-1;
+}
+
+.voice-wave span {
+  @apply w-1 h-4 bg-red-500 rounded-full;
+  animation: voice-wave 1.2s ease-in-out infinite;
+}
+
+.voice-wave span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.voice-wave span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.voice-text {
+  @apply text-red-600 font-medium;
+}
+
+@keyframes voice-wave {
+  0%, 100% { height: 1rem; }
+  50% { height: 1.5rem; }
+}
+
+.chatgpt-input-form-fullscreen {
+  @apply max-w-5xl mx-auto;
+}
+
+.input-container-fullscreen {
+  @apply relative flex items-center bg-white border-2 border-gray-300 rounded-2xl shadow-sm focus-within:border-saffron focus-within:shadow-lg transition-all duration-200 hover:shadow-md;
+}
+
+.chatgpt-input-fullscreen {
+  @apply flex-1 px-6 py-4 bg-transparent border-none outline-none text-gray-800 placeholder-gray-500 text-lg;
+}
+
+.input-actions-fullscreen {
+  @apply flex items-center gap-3 pr-4;
+}
+
+.voice-button-fullscreen {
+  @apply p-3 text-gray-500 hover:text-saffron transition-all duration-200 rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.voice-button-fullscreen.listening {
+  @apply text-red-500 bg-red-50 animate-pulse;
+}
+
+.send-button-fullscreen {
+  @apply p-3 bg-saffron text-white rounded-xl hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg;
+}
+
