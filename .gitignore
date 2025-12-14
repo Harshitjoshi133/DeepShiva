@@ -50,4 +50,3 @@ Thumbs.db
 .env.*.local
 logs/
 *.log
-*.sql

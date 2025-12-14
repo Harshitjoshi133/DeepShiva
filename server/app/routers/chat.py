@@ -8,10 +8,12 @@ import json
 import random
 from pathlib import Path
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import DisconnectionError, OperationalError
+from sqlalchemy import text
 
 from ..logging_config import get_logger, ErrorTracker, PerformanceLogger, get_ai_response_logger, AIResponseLogger
 from ..services.ollama_service import ollama_service
-from ..database import get_db
+from ..database import get_db, get_db_with_retry
 from ..models import User, Chat, ChatMessage
 
 router = APIRouter()
@@ -145,11 +147,13 @@ class ChatRequest(BaseModel):
     user_id: str = Field(..., description="Unique user identifier")
     context: Optional[str] = Field(None, description="Additional context for the query")
     language: Optional[str] = Field("en", description="Preferred response language")
+    is_new_chat: Optional[bool] = Field(False, description="Indicates if this is the first message in a new chat")
 
 class ChatResponse(BaseModel):
     response: str
     user_id: str
     message_id: str
+    chat_id: Optional[str] = None  # Include chat ID in response
     timestamp: str
     context_used: List[str]
     suggested_actions: List[str]
@@ -190,45 +194,96 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     try:
-        # Get or create user
-        user = db.query(User).filter(User.username == request.user_id).first()
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info(f"Processing chat query for user ID: {target_user_id} (requested: {request.user_id})")
+        
+        # Get user with ID 10
+        user = db.query(User).filter(User.id == target_user_id).first()
         if not user:
-            user = User(
-                username=request.user_id,
-                email=f"{request.user_id}@temp.com",  # Temporary email
-                full_name=request.user_id,
-                preferred_language=request.language
+            logger.error(f"User ID {target_user_id} not found in database")
+            raise HTTPException(
+                status_code=404,
+                detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
             )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
         
-        # Get or create active chat session for user
-        active_chat = db.query(Chat).filter(
-            Chat.user_id == user.id,
-            Chat.is_active == True
-        ).order_by(Chat.last_activity.desc()).first()
+        # Handle chat session logic
+        active_chat = None
         
-        # Create new chat if none exists or if last activity was more than 1 hour ago
-        if not active_chat or (datetime.now() - active_chat.last_activity.replace(tzinfo=None)).total_seconds() > 3600:
-            # Determine chat type based on message content
-            chat_type = _determine_chat_type(request.message)
+        if request.is_new_chat:
+            # Check if there's an existing empty chat session first
+            active_chat = db.query(Chat).filter(
+                Chat.user_id == user.id,
+                Chat.is_active == True
+            ).order_by(Chat.last_activity.desc()).first()
             
-            active_chat = Chat(
-                user_id=user.id,
-                title=_generate_chat_title(request.message),
-                chat_type=chat_type,
-                session_id=str(uuid.uuid4()),
-                chat_metadata={
+            # If there's an empty chat (no messages), use it and update its details
+            if active_chat and active_chat.message_count == 0:
+                # Update the existing empty chat with proper details
+                chat_type = _determine_chat_type(request.message)
+                active_chat.title = _generate_chat_title(request.message)
+                active_chat.chat_type = chat_type
+                active_chat.tags = _extract_context_from_response(request.message)
+                
+                # Update metadata
+                metadata = active_chat.chat_metadata or {}
+                metadata.update({
                     "language": request.language,
                     "context": request.context,
-                    "created_from": "chat_query"
-                },
-                tags=_extract_context_from_response(request.message)
-            )
-            db.add(active_chat)
-            db.commit()
-            db.refresh(active_chat)
+                    "created_from": "new_chat",
+                    "is_empty": False  # No longer empty
+                })
+                active_chat.chat_metadata = metadata
+                
+                db.commit()
+                db.refresh(active_chat)
+            else:
+                # Create a completely new chat
+                chat_type = _determine_chat_type(request.message)
+                
+                active_chat = Chat(
+                    user_id=user.id,
+                    title=_generate_chat_title(request.message),
+                    chat_type=chat_type,
+                    session_id=str(uuid.uuid4()),
+                    chat_metadata={
+                        "language": request.language,
+                        "context": request.context,
+                        "created_from": "new_chat"
+                    },
+                    tags=_extract_context_from_response(request.message)
+                )
+                db.add(active_chat)
+                db.commit()
+                db.refresh(active_chat)
+        else:
+            # Get or create active chat session for user (existing logic)
+            active_chat = db.query(Chat).filter(
+                Chat.user_id == user.id,
+                Chat.is_active == True
+            ).order_by(Chat.last_activity.desc()).first()
+            
+            # Create new chat if none exists or if last activity was more than 1 hour ago
+            if not active_chat or (datetime.now() - active_chat.last_activity.replace(tzinfo=None)).total_seconds() > 3600:
+                # Determine chat type based on message content
+                chat_type = _determine_chat_type(request.message)
+                
+                active_chat = Chat(
+                    user_id=user.id,
+                    title=_generate_chat_title(request.message),
+                    chat_type=chat_type,
+                    session_id=str(uuid.uuid4()),
+                    chat_metadata={
+                        "language": request.language,
+                        "context": request.context,
+                        "created_from": "chat_query"
+                    },
+                    tags=_extract_context_from_response(request.message)
+                )
+                db.add(active_chat)
+                db.commit()
+                db.refresh(active_chat)
         
         # Get conversation history from database
         conversation_history = []
@@ -344,6 +399,7 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
             response=ai_result["response"],
             user_id=request.user_id,
             message_id=message_id,
+            chat_id=str(active_chat.id) if active_chat else None,
             timestamp=datetime.now().isoformat(),
             context_used=context_used,
             suggested_actions=suggested_actions,
@@ -381,16 +437,22 @@ async def get_conversation_history(
     db: Session = Depends(get_db)
 ):
     """
-    Get conversation history for a user from database.
+    Get conversation history for user ID 10 from database.
     Returns recent chat messages with metadata.
     """
     
     try:
-        # Get user
-        user = db.query(User).filter(User.username == user_id).first()
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info(f"Getting conversation history for user ID: {target_user_id} (requested: {user_id})")
+        
+        # Get user with ID 10
+        user = db.query(User).filter(User.id == target_user_id).first()
         if not user:
+            logger.warning(f"User ID {target_user_id} not found in database")
             return ConversationHistory(
-                user_id=user_id,
+                user_id=str(target_user_id),
                 messages=[],
                 total_messages=0,
                 last_activity=datetime.now().isoformat()
@@ -427,7 +489,7 @@ async def get_conversation_history(
         last_activity = recent_messages[0].created_at.isoformat() if recent_messages else datetime.now().isoformat()
         
         return ConversationHistory(
-            user_id=user_id,
+            user_id=str(target_user_id),
             messages=formatted_messages,
             total_messages=total_messages,
             last_activity=last_activity
@@ -443,15 +505,20 @@ async def get_conversation_history(
 @router.delete("/history/{user_id}")
 async def clear_conversation_history(user_id: str, db: Session = Depends(get_db)):
     """
-    Clear conversation history for a user.
+    Clear conversation history for user ID 10.
     Marks chats and messages as inactive instead of deleting.
     """
     
     try:
-        # Get user
-        user = db.query(User).filter(User.username == user_id).first()
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info(f"Clearing conversation history for user ID: {target_user_id} (requested: {user_id})")
+        
+        # Get user by ID (not username)
+        user = db.query(User).filter(User.id == target_user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=f"User ID {target_user_id} not found")
         
         # Mark all user's chats as inactive
         chats_updated = db.query(Chat).filter(Chat.user_id == user.id).update(
@@ -464,15 +531,18 @@ async def clear_conversation_history(user_id: str, db: Session = Depends(get_db)
         
         db.commit()
         
-        logger.info(f"Conversation history cleared for user {user_id}", extra={
-            "user_id": user_id,
+        logger.info(f"Conversation history cleared for user ID {target_user_id}", extra={
+            "user_id": target_user_id,
+            "requested_user_id": user_id,
             "chats_affected": chats_updated,
             "messages_count": messages_count
         })
         
         return {
-            "message": f"Conversation history cleared for user {user_id}",
+            "message": f"Conversation history cleared for user ID {target_user_id}",
             "status": "success",
+            "user_id": str(target_user_id),
+            "requested_user_id": user_id,
             "chats_affected": chats_updated,
             "messages_count": messages_count,
             "timestamp": datetime.now().isoformat()
@@ -492,6 +562,81 @@ class ChatFeedbackRequest(BaseModel):
     feedback_type: str = Field(..., description="Type: helpful, accurate, relevant, clear")
     comments: Optional[str] = Field(None, max_length=500, description="Additional comments")
 
+class NewChatSessionRequest(BaseModel):
+    user_id: str = Field(..., description="User ID")
+    language: Optional[str] = Field("en", description="Preferred language")
+
+@router.post("/new-session")
+async def create_new_chat_session(
+    request: NewChatSessionRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new chat session for a user without sending a message.
+    This is called when user clicks "New Chat" button.
+    """
+    
+    try:
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info(f"Creating new chat session for user ID: {target_user_id} (requested: {request.user_id})")
+        
+        # Get user with ID 10
+        user = db.query(User).filter(User.id == target_user_id).first()
+        if not user:
+            logger.error(f"User ID {target_user_id} not found in database")
+            raise HTTPException(
+                status_code=404,
+                detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
+            )
+        
+        # Mark any existing active chats as inactive
+        db.query(Chat).filter(
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        ).update({"is_active": False})
+        
+        # Create new chat session
+        new_chat = Chat(
+            user_id=user.id,
+            title="New Chat",  # Default title, will be updated with first message
+            chat_type="general",
+            session_id=str(uuid.uuid4()),
+            chat_metadata={
+                "language": request.language,
+                "created_from": "new_session",
+                "is_empty": True  # Mark as empty until first message
+            },
+            tags=[]
+        )
+        db.add(new_chat)
+        db.commit()
+        db.refresh(new_chat)
+        
+        logger.info("New chat session created", extra={
+            "user_id": request.user_id,
+            "chat_id": new_chat.id,
+            "session_id": new_chat.session_id
+        })
+        
+        return {
+            "chat_id": str(new_chat.id),
+            "session_id": new_chat.session_id,
+            "title": new_chat.title,
+            "chat_type": new_chat.chat_type,
+            "created_at": new_chat.created_at.isoformat(),
+            "status": "success",
+            "message": "New chat session created successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating new chat session: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create new chat session"
+        )
+
 @router.get("/sessions/{user_id}")
 async def get_chat_sessions(
     user_id: str,
@@ -500,62 +645,230 @@ async def get_chat_sessions(
 ):
     """
     Get chat sessions for a user with metadata.
+    Uses user ID 10 as the default user for all operations.
+    Includes robust error handling for database connection issues.
     """
     
+    start_time = time.time()
+    
     try:
-        # Get user
-        user = db.query(User).filter(User.username == user_id).first()
+        # Test database connection first
+        logger.info("Testing database connection for chat sessions", extra={
+            "endpoint": "/api/v1/chat/sessions",
+            "requested_user_id": user_id,
+            "limit": limit
+        })
+        
+        db.execute(text("SELECT 1"))
+        logger.info("Database connection successful")
+        
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info("Chat sessions request initiated", extra={
+            "target_user_id": target_user_id,
+            "requested_user_id": user_id,
+            "limit": limit,
+            "endpoint": "GET /api/v1/chat/sessions"
+        })
+        
+        # Get user with ID 10
+        user_query_start = time.time()
+        user = db.query(User).filter(User.id == target_user_id).first()
+        user_query_time = (time.time() - user_query_start) * 1000
+        
+        logger.info("User lookup completed", extra={
+            "target_user_id": target_user_id,
+            "user_found": user is not None,
+            "user_query_time_ms": round(user_query_time, 2),
+            "user_details": {
+                "id": user.id if user else None,
+                "username": user.username if user else None,
+                "email": user.email if user else None,
+                "active": user.is_active if user else None
+            } if user else None
+        })
+        
         if not user:
+            logger.warning("User not found in database", extra={
+                "target_user_id": target_user_id,
+                "requested_user_id": user_id,
+                "error_type": "user_not_found"
+            })
             return {
-                "user_id": user_id,
+                "user_id": str(target_user_id),
                 "sessions": [],
-                "total_sessions": 0
+                "total_sessions": 0,
+                "status": "user_not_found",
+                "message": f"User ID {target_user_id} not found. Please run ensure_user_10.py script."
             }
         
-        # Get chat sessions
+        # Get chat sessions with error handling
+        sessions_query_start = time.time()
         sessions = db.query(Chat).filter(
             Chat.user_id == user.id,
             Chat.is_active == True
         ).order_by(Chat.last_activity.desc()).limit(limit).all()
+        sessions_query_time = (time.time() - sessions_query_start) * 1000
+        
+        logger.info("Chat sessions query completed", extra={
+            "user_id": target_user_id,
+            "sessions_found": len(sessions),
+            "query_time_ms": round(sessions_query_time, 2),
+            "limit_applied": limit,
+            "sessions_summary": [
+                {
+                    "chat_id": s.id,
+                    "title": s.title,
+                    "type": s.chat_type,
+                    "messages": s.message_count,
+                    "last_activity": s.last_activity.isoformat() if s.last_activity else None
+                } for s in sessions[:3]  # Log first 3 sessions for debugging
+            ] if sessions else []
+        })
         
         # Format sessions
+        format_start_time = time.time()
         formatted_sessions = []
-        for session in sessions:
-            formatted_sessions.append({
-                "session_id": session.session_id,
-                "chat_id": session.id,
-                "title": session.title,
-                "chat_type": session.chat_type,
-                "message_count": session.message_count,
-                "total_tokens": session.total_tokens,
-                "avg_response_time": session.avg_response_time,
-                "user_rating": session.user_rating,
-                "tags": session.tags or [],
-                "is_favorite": session.is_favorite,
-                "last_activity": session.last_activity.isoformat(),
-                "created_at": session.created_at.isoformat(),
-                "chat_metadata": session.chat_metadata or {}
+        formatting_errors = 0
+        
+        for i, session in enumerate(sessions):
+            try:
+                formatted_session = {
+                    "session_id": session.session_id,
+                    "chat_id": session.id,
+                    "title": session.title or "Untitled Chat",
+                    "chat_type": session.chat_type or "general",
+                    "message_count": session.message_count or 0,
+                    "total_tokens": session.total_tokens or 0,
+                    "avg_response_time": float(session.avg_response_time) if session.avg_response_time else 0.0,
+                    "user_rating": session.user_rating,
+                    "tags": session.tags or [],
+                    "is_favorite": session.is_favorite or False,
+                    "last_activity": session.last_activity.isoformat() if session.last_activity else datetime.now().isoformat(),
+                    "created_at": session.created_at.isoformat() if session.created_at else datetime.now().isoformat(),
+                    "chat_metadata": session.chat_metadata or {}
+                }
+                formatted_sessions.append(formatted_session)
+                
+                # Log detailed info for first session
+                if i == 0:
+                    logger.info("First session details", extra={
+                        "session_details": formatted_session
+                    })
+                    
+            except Exception as format_error:
+                formatting_errors += 1
+                logger.warning("Error formatting session", extra={
+                    "session_id": session.id if hasattr(session, 'id') else 'unknown',
+                    "error": str(format_error),
+                    "error_type": type(format_error).__name__
+                })
+                # Skip malformed sessions
+                continue
+        
+        format_time = (time.time() - format_start_time) * 1000
+        
+        logger.info("Session formatting completed", extra={
+            "total_sessions": len(sessions),
+            "formatted_sessions": len(formatted_sessions),
+            "formatting_errors": formatting_errors,
+            "format_time_ms": round(format_time, 2)
+        })
+        
+        # Get total session count with fallback
+        count_start_time = time.time()
+        try:
+            total_sessions = db.query(Chat).filter(
+                Chat.user_id == user.id,
+                Chat.is_active == True
+            ).count()
+            count_time = (time.time() - count_start_time) * 1000
+            
+            logger.info("Session count query completed", extra={
+                "total_sessions": total_sessions,
+                "count_query_time_ms": round(count_time, 2)
+            })
+        except Exception as count_error:
+            count_time = (time.time() - count_start_time) * 1000
+            total_sessions = len(formatted_sessions)
+            
+            logger.warning("Error counting sessions, using fallback", extra={
+                "error": str(count_error),
+                "error_type": type(count_error).__name__,
+                "fallback_count": total_sessions,
+                "count_query_time_ms": round(count_time, 2)
             })
         
-        # Get total session count
-        total_sessions = db.query(Chat).filter(
-            Chat.user_id == user.id,
-            Chat.is_active == True
-        ).count()
+        # Calculate total processing time
+        total_processing_time = (time.time() - start_time) * 1000
         
-        return {
-            "user_id": user_id,
+        # Prepare response
+        response_data = {
+            "user_id": str(target_user_id),
+            "database_user_id": target_user_id,
+            "requested_user_id": user_id,
             "sessions": formatted_sessions,
             "total_sessions": total_sessions,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "status": "success"
         }
         
+        logger.info("Chat sessions request completed successfully", extra={
+            "target_user_id": target_user_id,
+            "requested_user_id": user_id,
+            "sessions_returned": len(formatted_sessions),
+            "total_sessions_in_db": total_sessions,
+            "limit_applied": limit,
+            "total_processing_time_ms": round(total_processing_time, 2),
+            "performance_breakdown": {
+                "user_query_ms": round(user_query_time, 2),
+                "sessions_query_ms": round(sessions_query_time, 2),
+                "formatting_ms": round(format_time, 2),
+                "count_query_ms": round(count_time, 2) if 'count_time' in locals() else 0
+            },
+            "response_summary": {
+                "status": "success",
+                "has_sessions": len(formatted_sessions) > 0,
+                "user_found": True,
+                "database_healthy": True
+            }
+        })
+        
+        return response_data
+        
     except Exception as e:
-        logger.error(f"Error fetching chat sessions: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch chat sessions"
-        )
+        from sqlalchemy.exc import DisconnectionError, OperationalError
+        
+        # Log the specific error type
+        error_type = type(e).__name__
+        logger.error(f"Error fetching chat sessions: ({error_type}) {str(e)}")
+        
+        # Handle specific database connection errors
+        if isinstance(e, (DisconnectionError, OperationalError)):
+            logger.error("Database connection lost, attempting to handle gracefully")
+            
+            # Return empty result with error status instead of raising exception
+            return {
+                "user_id": user_id,
+                "sessions": [],
+                "total_sessions": 0,
+                "timestamp": datetime.now().isoformat(),
+                "status": "database_connection_error",
+                "error_message": "Database temporarily unavailable. Please try again."
+            }
+        
+        # For other errors, still return structured response
+        return {
+            "user_id": str(10),  # Always return user ID 10
+            "database_user_id": 10,
+            "requested_user_id": user_id,
+            "sessions": [],
+            "total_sessions": 0,
+            "timestamp": datetime.now().isoformat(),
+            "status": "error",
+            "error_message": "Unable to fetch chat sessions at this time."
+        }
 
 @router.post("/feedback")
 async def submit_chat_feedback(request: ChatFeedbackRequest, db: Session = Depends(get_db)):
@@ -1114,9 +1427,13 @@ async def get_all_chats(
         # Build query
         query = db.query(Chat).filter(Chat.is_active == True)
         
-        # Apply filters
+        # Apply filters - always use user ID 10
         if user_id:
-            user = db.query(User).filter(User.username == user_id).first()
+            target_user_id = 10
+            logger.info(f"Filtering chats for user ID: {target_user_id} (requested: {user_id})")
+            
+            # Get user by ID (not username)
+            user = db.query(User).filter(User.id == target_user_id).first()
             if user:
                 query = query.filter(Chat.user_id == user.id)
             else:
@@ -1127,10 +1444,12 @@ async def get_all_chats(
                     "limit": limit,
                     "offset": offset,
                     "filters": {
-                        "user_id": user_id,
+                        "user_id": str(target_user_id),
+                        "requested_user_id": user_id,
                         "chat_type": chat_type
                     },
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "user_not_found"
                 }
         
         if chat_type:
@@ -1211,10 +1530,10 @@ async def get_all_chats(
             "offset": offset,
             "has_more": (offset + len(formatted_chats)) < total_count,
             "filters": {
-                "user_id": user_id,
+                "user_id": str(10),  # Always user ID 10
+                "requested_user_id": user_id,
                 "chat_type": chat_type
             },
-            "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
@@ -1222,4 +1541,135 @@ async def get_all_chats(
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch chats"
+        )
+
+@router.get("/messages/{chat_id}")
+async def get_chat_messages(
+    chat_id: int,
+    user_id: str = Query(..., description="User ID"),
+    limit: int = Query(50, ge=1, le=200, description="Number of messages to return"),
+    offset: int = Query(0, ge=0, description="Number of messages to skip"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get messages for a specific chat ID.
+    Returns messages with proper formatting for the frontend.
+    """
+    
+    try:
+        # Always use user ID 10 for chat operations
+        target_user_id = 10
+        
+        logger.info(f"Getting messages for chat_id: {chat_id}, user_id: {target_user_id} (requested: {user_id})")
+        
+        # Get user with ID 10
+        user = db.query(User).filter(User.id == target_user_id).first()
+        if not user:
+            logger.warning(f"User ID {target_user_id} not found in database")
+            raise HTTPException(
+                status_code=404,
+                detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
+            )
+        
+        # Verify chat exists and belongs to user
+        chat = db.query(Chat).filter(
+            Chat.id == chat_id,
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        ).first()
+        
+        if not chat:
+            logger.warning(f"Chat ID {chat_id} not found for user {target_user_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chat ID {chat_id} not found or not accessible"
+            )
+        
+        # Get messages for this chat
+        messages_query = db.query(ChatMessage).filter(
+            ChatMessage.chat_id == chat_id,
+            ChatMessage.user_id == user.id
+        ).order_by(ChatMessage.created_at.asc()).offset(offset).limit(limit)
+        
+        messages = messages_query.all()
+        
+        # Get total message count for this chat
+        total_messages = db.query(ChatMessage).filter(
+            ChatMessage.chat_id == chat_id,
+            ChatMessage.user_id == user.id
+        ).count()
+        
+        # Format messages for frontend
+        formatted_messages = []
+        for msg in messages:
+            # Add user message
+            formatted_messages.append({
+                "message_id": f"msg_{msg.id}",
+                "role": "user",
+                "content": msg.message,
+                "timestamp": msg.created_at.isoformat(),
+                "language": msg.language,
+                "message_type": msg.message_type
+            })
+            
+            # Add assistant response if exists
+            if msg.response:
+                formatted_messages.append({
+                    "message_id": f"msg_{msg.id}_response",
+                    "role": "assistant", 
+                    "content": msg.response,
+                    "timestamp": msg.created_at.isoformat(),
+                    "response_time": f"{msg.response_time}s" if msg.response_time else None,
+                    "ai_model": msg.ai_model,
+                    "tokens_used": msg.tokens_used,
+                    "confidence_score": msg.confidence_score,
+                    "context_data": msg.context_data
+                })
+        
+        logger.info("Chat messages retrieved successfully", extra={
+            "chat_id": chat_id,
+            "user_id": target_user_id,
+            "messages_returned": len(formatted_messages),
+            "total_messages": total_messages,
+            "limit": limit,
+            "offset": offset
+        })
+        
+        return {
+            "chat_id": chat_id,
+            "user_id": str(target_user_id),
+            "requested_user_id": user_id,
+            "chat_info": {
+                "title": chat.title,
+                "chat_type": chat.chat_type,
+                "session_id": chat.session_id,
+                "created_at": chat.created_at.isoformat(),
+                "last_activity": chat.last_activity.isoformat(),
+                "message_count": chat.message_count,
+                "total_tokens": chat.total_tokens,
+                "avg_response_time": chat.avg_response_time,
+                "user_rating": chat.user_rating,
+                "tags": chat.tags or [],
+                "is_favorite": chat.is_favorite,
+                "chat_metadata": chat.chat_metadata or {}
+            },
+            "messages": formatted_messages,
+            "pagination": {
+                "total_messages": total_messages,
+                "returned_count": len(formatted_messages),
+                "limit": limit,
+                "offset": offset,
+                "has_more": (offset + len(formatted_messages)) < total_messages
+            },
+            "timestamp": datetime.now().isoformat(),
+            "status": "success"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching chat messages: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch chat messages"
         )

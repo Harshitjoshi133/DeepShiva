@@ -396,6 +396,14 @@ body {
   @apply w-full px-3 py-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-sm;
 }
 
+.new-chat-button.loading {
+  @apply opacity-75 cursor-not-allowed bg-orange-400;
+}
+
+.new-chat-button:disabled {
+  @apply cursor-not-allowed;
+}
+
 .history-section {
   @apply flex-1 overflow-hidden flex flex-col;
 }
@@ -485,28 +493,67 @@ body {
 }
 
 .history-item {
-  @apply flex items-center gap-1 mb-1;
+  @apply flex items-center gap-1 mb-1 relative;
 }
 
 .history-item-button {
-  @apply flex-1 p-2 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
+  @apply flex-1 p-3 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
 }
 
 .history-item-button.active {
   @apply border-saffron bg-orange-50;
 }
 
+.history-item-button.loading {
+  @apply opacity-75 cursor-not-allowed bg-gray-50;
+}
+
+.history-item-button:disabled {
+  @apply cursor-not-allowed;
+}
+
+.history-item-content {
+  @apply flex items-center justify-between w-full;
+}
+
 .history-item-title {
-  @apply text-xs font-medium text-gray-800 truncate;
+  @apply text-sm font-medium text-gray-800 truncate flex-1 mr-2;
 }
 
-.history-item-date {
-  @apply text-xs text-gray-500 mt-1;
+.history-item-time {
+  @apply text-xs text-gray-500 flex-shrink-0;
 }
 
-.delete-chat-button {
-  @apply p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors;
+/* Chat Menu Dropdown */
+.chat-menu-container {
+  @apply relative;
 }
+
+.chat-menu-button {
+  @apply p-1 rounded-md hover:bg-gray-100 transition-colors duration-200 text-gray-500 hover:text-gray-700;
+}
+
+.chat-dropdown-menu {
+  @apply absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-24;
+}
+
+.dropdown-item {
+  @apply w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors duration-200 flex items-center gap-2;
+}
+
+.dropdown-item.delete-item {
+  @apply text-red-600 hover:bg-red-50;
+}
+
+.chat-id {
+  @apply text-blue-600 font-mono bg-blue-50 px-1 py-0.5 rounded;
+}
+
+.message-count {
+  @apply text-green-600 bg-green-50 px-1 py-0.5 rounded;
+}
+
+
 
 .chatgpt-fullscreen-container {
   @apply flex-1 flex flex-col;
@@ -594,7 +641,46 @@ body {
 }
 
 .chatgpt-messages-fullscreen {
-  @apply flex-1 overflow-y-auto;
+  @apply flex-1 overflow-y-auto relative;
+}
+
+/* Chat Loading Overlay */
+.chat-loading-overlay {
+  @apply absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-50;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.chat-loading-content {
+  @apply text-center p-8 max-w-md mx-auto;
+  animation: slideUp 0.4s ease-out;
+}
+
+.chat-loading-spinner {
+  @apply mb-4 flex justify-center;
+}
+
+.chat-loading-title {
+  @apply text-xl font-semibold text-gray-800 mb-2 gradient-text;
+}
+
+.chat-loading-subtitle {
+  @apply text-sm text-gray-600 leading-relaxed;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chatgpt-welcome-fullscreen {

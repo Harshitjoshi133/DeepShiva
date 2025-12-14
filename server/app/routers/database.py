@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from app.database import get_db
 from app.models import *
 from typing import List, Dict, Any
@@ -153,16 +153,99 @@ async def get_tourism_places(skip: int = 0, limit: int = 100, db: Session = Depe
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/health")
-async def database_health_check(db: Session = Depends(get_db)):
-    """Check database connectivity and basic stats."""
+async def database_health_check():
+    """
+    Comprehensive database health check with connection retry logic.
+    Does not depend on get_db to avoid dependency injection issues.
+    """
+    from app.database import test_database_connection, get_db_with_retry
+    from sqlalchemy.exc import DisconnectionError, OperationalError
+    import time
+    
+    start_time = time.time()
+    
     try:
-        # Simple query to test connection
+        # Test basic connectivity
+        connection_status = test_database_connection()
+        
+        if connection_status["status"] == "failed":
+            return {
+                "status": "unhealthy",
+                "connection": "failed",
+                "error": connection_status["error"],
+                "response_time_ms": round((time.time() - start_time) * 1000, 2),
+                "timestamp": time.time()
+            }
+        
+        # Test database operations
+        db = get_db_with_retry()
+        
+        # Test basic queries
         user_count = db.query(User).count()
+        chat_count = db.query(Chat).count()
+        
+        # Test write operation (safe)
+        db.execute(text("SELECT 1 as test_query"))
+        
+        db.close()
+        
+        response_time = round((time.time() - start_time) * 1000, 2)
+        
         return {
             "status": "healthy",
             "connection": "active",
-            "sample_count": user_count,
-            "message": "Database is accessible and responding"
+            "database_version": connection_status.get("version", "unknown"),
+            "stats": {
+                "users": user_count,
+                "chats": chat_count
+            },
+            "response_time_ms": response_time,
+            "timestamp": time.time(),
+            "message": "Database is fully operational"
         }
+        
+    except (DisconnectionError, OperationalError) as db_error:
+        return {
+            "status": "unhealthy",
+            "connection": "failed",
+            "error_type": "connection_error",
+            "error": str(db_error),
+            "response_time_ms": round((time.time() - start_time) * 1000, 2),
+            "timestamp": time.time(),
+            "message": "Database connection failed"
+        }
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database health check failed: {str(e)}")
+        return {
+            "status": "unhealthy", 
+            "connection": "unknown",
+            "error_type": "general_error",
+            "error": str(e),
+            "response_time_ms": round((time.time() - start_time) * 1000, 2),
+            "timestamp": time.time(),
+            "message": "Database health check failed"
+        }
+
+@router.get("/connection-test")
+async def test_database_connection_endpoint():
+    """
+    Simple connection test endpoint for monitoring.
+    """
+    from app.database import test_database_connection
+    
+    result = test_database_connection()
+    
+    if result["status"] == "connected":
+        return {
+            "status": "success",
+            "connected": True,
+            "version": result["version"],
+            "timestamp": result["timestamp"]
+        }
+    else:
+        return {
+            "status": "failed",
+            "connected": False,
+            "error": result["error"],
+            "timestamp": result["timestamp"]
+        }

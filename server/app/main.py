@@ -118,24 +118,23 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health_check(request: Request):
-    """Enhanced health check with logging"""
+    """Enhanced health check with robust database testing"""
     from datetime import datetime
+    from app.database import test_database_connection
     
     request_id = getattr(request.state, 'request_id', 'unknown')
     timestamp = datetime.utcnow().isoformat() + "Z"
     
-    # Test database connection
-    db_status = "operational"
-    try:
-        # Simple database connectivity test (modern SQLAlchemy approach)
-        with engine.connect() as connection:
-            connection.execute("SELECT 1")
+    # Test database connection using robust method
+    db_test_result = test_database_connection()
+    db_status = "operational" if db_test_result["status"] == "connected" else "error"
+    
+    if db_status == "operational":
         logger.debug("Database health check passed", extra={"request_id": request_id})
-    except Exception as e:
-        db_status = "error"
+    else:
         logger.error("Database health check failed", extra={
             "request_id": request_id,
-            "error": str(e)
+            "error": db_test_result.get("error", "Unknown database error")
         })
     
     health_status = {
@@ -144,8 +143,8 @@ async def health_check(request: Request):
         "request_id": request_id,
         "services": {
             "chat": "operational",
-            "vision": "operational",
-            "tourism": "operational", 
+            "vision": "operational", 
+            "tourism": "operational",
             "culture": "operational",
             "database": db_status
         },
@@ -153,6 +152,11 @@ async def health_check(request: Request):
             "environment": settings.environment,
             "logging": "operational",
             "debug_mode": settings.debug
+        },
+        "database_info": {
+            "status": db_test_result["status"],
+            "version": db_test_result.get("version", "unknown"),
+            "error": db_test_result.get("error") if db_status == "error" else None
         }
     }
     

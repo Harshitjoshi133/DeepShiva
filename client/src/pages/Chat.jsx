@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Mic, MicOff, Loader2, ArrowLeft, Globe, Menu, X } from 'lucide-react'
+import { Send, Mic, MicOff, Loader2, ArrowLeft, Globe, Menu, X, MoreHorizontal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 import { Link } from 'react-router-dom'
+import { getCurrentUserId } from '../services/userService'
 
 export default function Chat() {
   const { t, language, changeLanguage } = useLanguage()
@@ -40,6 +41,9 @@ export default function Chat() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [loadingChatId, setLoadingChatId] = useState(null)
+  const [openDropdownId, setOpenDropdownId] = useState(null)
   const [isListening, setIsListening] = useState(false)
   const [recognition, setRecognition] = useState(null)
   const [showHistory, setShowHistory] = useState(true)
@@ -49,8 +53,10 @@ export default function Chat() {
   const [showAbout, setShowAbout] = useState(false)
   const [responseTime, setResponseTime] = useState(null)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const [userId] = useState('demo-user') // Consistent user ID
   const messagesEndRef = useRef(null)
+  
+  // Get current user ID (always 10)
+  const userId = getCurrentUserId()
 
   const languages = {
     en: 'English',
@@ -62,11 +68,18 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Helper function to format time to HH:MM format
+  const formatTime = (timestamp) => {
+    if (!timestamp) return ''
+    const date = new Date(timestamp)
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  // Keyboard shortcut for toggling sidebar
+  // Keyboard shortcut for toggling sidebar and close dropdown on outside click
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.ctrlKey && e.key === 'b') {
@@ -76,11 +89,24 @@ export default function Chat() {
       if (e.key === 'Escape' && showHistory) {
         setShowHistory(false)
       }
+      if (e.key === 'Escape' && openDropdownId) {
+        setOpenDropdownId(null)
+      }
+    }
+
+    const handleClickOutside = (e) => {
+      if (openDropdownId && !e.target.closest('.chat-menu-container')) {
+        setOpenDropdownId(null)
+      }
     }
 
     window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [showHistory])
+    window.addEventListener('click', handleClickOutside)
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+      window.removeEventListener('click', handleClickOutside)
+    }
+  }, [showHistory, openDropdownId])
 
   // Initialize speech recognition
   useEffect(() => {
@@ -146,19 +172,25 @@ export default function Chat() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
+        console.log('🚀 Initializing chat component for user:', userId)
+        
         // Load from localStorage first for immediate display
         const savedHistory = localStorage.getItem('deepshiva-chat-history')
         if (savedHistory) {
-          setChatHistory(JSON.parse(savedHistory))
+          const localChats = JSON.parse(savedHistory)
+          console.log('💾 Loaded from localStorage:', localChats.length, 'chats')
+          setChatHistory(localChats)
         }
         
         // Then try to load from backend
+        console.log('🌐 Loading chat sessions from backend...')
         await loadChatSessions()
         
       } catch (error) {
-        console.error('Error loading chat history:', error)
+        console.error('🚨 Error loading chat history:', error)
       } finally {
         setIsInitialLoading(false)
+        console.log('✅ Chat component initialization complete')
       }
     }
     
@@ -172,17 +204,56 @@ export default function Chat() {
       const response = await fetch(`/api/v1/chat/sessions/${userId}?limit=20`)
       if (response.ok) {
         const data = await response.json()
+        
+        // Log the complete database response for debugging
+        console.log('📊 Database Response for Chat Sessions:', {
+          user_id: data.user_id,
+          database_user_id: data.database_user_id,
+          requested_user_id: data.requested_user_id,
+          total_sessions: data.total_sessions,
+          status: data.status,
+          timestamp: data.timestamp,
+          sessions_count: data.sessions?.length || 0,
+          full_response: data
+        })
+        
         if (data.sessions && data.sessions.length > 0) {
-          // Convert backend format to frontend format
-          const backendChats = data.sessions.map(session => ({
-            id: session.session_id,
-            title: session.title,
-            messages: [], // We'll load messages when needed
-            timestamp: session.last_activity,
-            chat_type: session.chat_type,
-            message_count: session.message_count,
-            chat_id: session.chat_id // Store the actual chat ID
-          }))
+          // Convert backend format to frontend format with proper IDs
+          const backendChats = data.sessions.map(session => {
+            console.log('💾 Processing session from DB:', {
+              session_id: session.session_id,
+              chat_id: session.chat_id,
+              title: session.title,
+              message_count: session.message_count,
+              chat_type: session.chat_type,
+              last_activity: session.last_activity
+            })
+            
+            return {
+              id: session.chat_id, // Use actual database chat_id as the primary ID
+              session_id: session.session_id, // Keep session_id separate
+              title: session.title || 'Untitled Chat',
+              messages: [], // We'll load messages when needed
+              timestamp: session.last_activity,
+              chat_type: session.chat_type || 'general',
+              message_count: session.message_count || 0,
+              chat_id: session.chat_id, // Store the actual chat ID for reference
+              user_rating: session.user_rating,
+              tags: session.tags || [],
+              is_favorite: session.is_favorite || false,
+              created_at: session.created_at,
+              chat_metadata: session.chat_metadata || {}
+            }
+          })
+          
+          // Log the converted chat data
+          console.log('🔄 Converted chat sessions for frontend:', backendChats.map(chat => ({
+            id: chat.id,
+            chat_id: chat.chat_id,
+            session_id: chat.session_id,
+            title: chat.title,
+            message_count: chat.message_count
+          })))
           
           // Update chat history with backend data
           setChatHistory(backendChats)
@@ -190,13 +261,18 @@ export default function Chat() {
           // Update localStorage with backend data
           localStorage.setItem('deepshiva-chat-history', JSON.stringify(backendChats))
           
-          console.log('Loaded chat sessions:', backendChats.length)
+          console.log('✅ Successfully loaded and stored chat sessions:', backendChats.length)
+        } else {
+          console.log('📭 No chat sessions found in database response')
         }
       } else {
-        console.log('Failed to load chat sessions:', response.status)
+        console.log('❌ Failed to load chat sessions:', response.status, response.statusText)
+        const errorText = await response.text()
+        console.log('Error response:', errorText)
       }
     } catch (backendError) {
-      console.log('Backend chat loading failed, using localStorage:', backendError)
+      console.error('🚨 Backend chat loading failed:', backendError)
+      console.log('Falling back to localStorage data')
     }
   }
 
@@ -225,16 +301,30 @@ export default function Chat() {
   // Save current chat to history
   const saveCurrentChat = () => {
     if (messages.length > 0) {
-      const chatId = currentChatId || Date.now().toString()
+      // Use current chat ID, but clean up temporary IDs
+      let chatId = currentChatId
+      if (!chatId || String(chatId).startsWith('temp_')) {
+        chatId = Date.now().toString()
+      }
+      
+      console.log('💾 Saving current chat:', {
+        chat_id: chatId,
+        message_count: messages.length,
+        is_temporary: String(chatId).startsWith('temp_')
+      })
+      
       const chatTitle = messages.find(m => m.role === 'user')?.content.slice(0, 50) + '...' || 'New Chat'
       const chatData = {
         id: chatId,
+        chat_id: chatId, // Store as both id and chat_id for consistency
         title: chatTitle,
         messages: messages,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        message_count: messages.filter(m => m.role === 'user').length, // Count user messages
+        chat_type: 'general' // Default type
       }
       
-      const updatedHistory = chatHistory.filter(chat => chat.id !== chatId)
+      const updatedHistory = chatHistory.filter(chat => chat.id !== chatId && chat.chat_id !== chatId)
       updatedHistory.unshift(chatData)
       
       // Keep only last 20 chats
@@ -242,89 +332,167 @@ export default function Chat() {
       setChatHistory(limitedHistory)
       localStorage.setItem('deepshiva-chat-history', JSON.stringify(limitedHistory))
       setCurrentChatId(chatId)
+      
+      console.log('✅ Chat saved to localStorage')
     }
   }
 
   // Load a chat from history
   const loadChat = async (chat) => {
     try {
-      setIsLoading(true)
+      setIsChatLoading(true)
+      setLoadingChatId(chat.chat_id)
       
-      // If chat has messages in localStorage, use them
-      if (chat.messages && chat.messages.length > 0) {
-        setMessages(chat.messages)
-        setCurrentChatId(chat.id)
-        return
-      }
+      console.log('📂 Loading chat:', {
+        chat_id: chat.chat_id,
+        session_id: chat.session_id,
+        title: chat.title,
+        message_count: chat.message_count,
+        has_cached_messages: chat.messages && chat.messages.length > 0
+      })
       
-      // Otherwise, try to load from backend
-      const response = await fetch(`/api/v1/chat/history/${userId}?limit=50`)
+      // Clear messages immediately to show loading state
+      setMessages([])
+      setCurrentChatId(chat.chat_id) // Use the actual database chat_id
+      
+      // Always try to load fresh messages from backend using the specific chat ID
+      console.log('🌐 Loading messages from backend for chat_id:', chat.chat_id)
+      
+      const response = await fetch(`/api/v1/chat/messages/${chat.chat_id}?user_id=${userId}&limit=100`)
       if (response.ok) {
         const data = await response.json()
         
-        // Filter messages for this chat session (approximate matching)
-        // Since we don't have perfect session tracking, we'll load recent messages
-        const chatMessages = data.messages || []
-        
-        // Convert backend format to frontend format
-        const formattedMessages = []
-        chatMessages.forEach(msg => {
-          formattedMessages.push({
-            role: 'user',
-            content: msg.user_message,
-            timestamp: msg.timestamp
-          })
-          if (msg.bot_response) {
-            formattedMessages.push({
-              role: 'assistant',
-              content: msg.bot_response,
-              timestamp: msg.timestamp,
-              responseTime: msg.response_time ? `${msg.response_time}s` : undefined
-            })
-          }
+        console.log('📊 Backend chat messages response:', {
+          chat_id: data.chat_id,
+          total_messages: data.pagination?.total_messages || 0,
+          messages_returned: data.messages?.length || 0,
+          chat_title: data.chat_info?.title,
+          status: data.status
         })
         
-        setMessages(formattedMessages)
-        setCurrentChatId(chat.id)
-        
-        // Update localStorage with loaded messages
-        const updatedChat = { ...chat, messages: formattedMessages }
-        const updatedHistory = chatHistory.map(h => h.id === chat.id ? updatedChat : h)
-        setChatHistory(updatedHistory)
-        localStorage.setItem('deepshiva-chat-history', JSON.stringify(updatedHistory))
+        if (data.messages && data.messages.length > 0) {
+          // Use the messages directly from the new endpoint (already formatted)
+          const formattedMessages = data.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            responseTime: msg.response_time,
+            message_id: msg.message_id,
+            ai_model: msg.ai_model,
+            tokens_used: msg.tokens_used,
+            confidence_score: msg.confidence_score,
+            context_data: msg.context_data
+          }))
+          
+          console.log('✅ Formatted messages for display:', formattedMessages.length)
+          
+          setMessages(formattedMessages)
+          setCurrentChatId(chat.chat_id) // Use the actual database chat_id
+          
+          // Update localStorage with fresh messages
+          const updatedChat = { 
+            ...chat, 
+            messages: formattedMessages,
+            title: data.chat_info?.title || chat.title,
+            message_count: data.chat_info?.message_count || chat.message_count
+          }
+          const updatedHistory = chatHistory.map(h => h.id === chat.id ? updatedChat : h)
+          setChatHistory(updatedHistory)
+          localStorage.setItem('deepshiva-chat-history', JSON.stringify(updatedHistory))
+        } else {
+          console.log('📭 No messages found for this chat')
+          // If no messages from backend, keep cached messages or set empty
+          if (!chat.messages || chat.messages.length === 0) {
+            setMessages([])
+          }
+          setCurrentChatId(chat.chat_id)
+        }
       } else {
+        console.log('❌ Failed to load from backend, using cached data')
+        const errorText = await response.text()
+        console.log('Error response:', errorText)
+        
         // Fallback to localStorage data
         setMessages(chat.messages || [])
-        setCurrentChatId(chat.id)
+        setCurrentChatId(chat.chat_id)
       }
     } catch (error) {
-      console.error('Error loading chat:', error)
+      console.error('🚨 Error loading chat:', error)
       // Fallback to localStorage data
       setMessages(chat.messages || [])
-      setCurrentChatId(chat.id)
+      setCurrentChatId(chat.chat_id)
     } finally {
-      setIsLoading(false)
+      setIsChatLoading(false)
+      setLoadingChatId(null)
     }
   }
 
   // Start new chat
-  const startNewChat = () => {
-    saveCurrentChat()
-    setMessages([])
-    setCurrentChatId(null)
-    // Keep sidebar open after starting new chat
+  const startNewChat = async () => {
+    try {
+      setIsChatLoading(true)
+      
+      // Save current chat if it has messages
+      if (messages.length > 0) {
+        saveCurrentChat()
+      }
+      
+      // Clear current chat state immediately for better UX
+      setMessages([])
+      setCurrentChatId(null)
+      
+      // Create new chat session on backend
+      const response = await fetch('/api/v1/chat/new-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          user_id: userId,
+          language: language 
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentChatId(data.chat_id)
+        console.log('New chat session created:', data.chat_id)
+        
+        // Refresh chat sessions list
+        setTimeout(() => {
+          loadChatSessions()
+        }, 500)
+      } else {
+        // Fallback to temporary ID if backend fails
+        const tempChatId = `temp_${Date.now()}`
+        setCurrentChatId(tempChatId)
+        console.log('Using temporary chat ID:', tempChatId)
+      }
+      
+    } catch (error) {
+      console.error('Error creating new chat session:', error)
+      // Fallback to temporary ID
+      const tempChatId = `temp_${Date.now()}`
+      setCurrentChatId(tempChatId)
+    } finally {
+      setIsChatLoading(false)
+    }
   }
 
   // Delete chat from history
   const deleteChat = (chatId) => {
-    const updatedHistory = chatHistory.filter(chat => chat.id !== chatId)
+    console.log('🗑️ Deleting chat:', chatId)
+    
+    const updatedHistory = chatHistory.filter(chat => chat.id !== chatId && chat.chat_id !== chatId)
     setChatHistory(updatedHistory)
     localStorage.setItem('deepshiva-chat-history', JSON.stringify(updatedHistory))
     
-    if (currentChatId === chatId) {
+    // Check if we're deleting the currently active chat
+    if (currentChatId === chatId || currentChatId === String(chatId)) {
+      console.log('🔄 Clearing current chat as it was deleted')
       setMessages([])
       setCurrentChatId(null)
     }
+    
+    console.log('✅ Chat deleted successfully')
   }
 
   const handleSubmit = async (e) => {
@@ -334,6 +502,10 @@ export default function Chat() {
     const userMessage = input.trim()
     setInput('')
     const startTime = Date.now()
+    
+    // Check if this is the first message in a new chat session
+    const isFirstMessage = messages.length === 0
+    const isTemporaryChat = currentChatId && String(currentChatId).startsWith('temp_')
     
     const newMessages = [...messages, { 
       role: 'user', 
@@ -345,13 +517,15 @@ export default function Chat() {
     setResponseTime(null)
 
     try {
+      // Send the message to the backend
       const response = await fetch('/api/v1/chat/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage, 
           user_id: userId,
-          language: language 
+          language: language,
+          is_new_chat: isFirstMessage || isTemporaryChat // Indicate if this is a new chat
         })
       })
       
@@ -367,6 +541,11 @@ export default function Chat() {
         responseTime: data.processing_time_seconds ? `${data.processing_time_seconds}s` : `${(timeTaken/1000).toFixed(2)}s`
       }]
       setMessages(finalMessages)
+      
+      // If this was the first message or temporary chat, update the current chat ID with the real one from backend
+      if ((isFirstMessage || isTemporaryChat) && data.chat_id) {
+        setCurrentChatId(data.chat_id)
+      }
       
       // Auto-save after each exchange and refresh chat sessions
       setTimeout(() => {
@@ -478,8 +657,12 @@ export default function Chat() {
                 <div className="new-chat-section">
                   <button 
                     onClick={startNewChat} 
-                    className="new-chat-button"
+                    disabled={isChatLoading}
+                    className={`new-chat-button ${isChatLoading ? 'loading' : ''}`}
                   >
+                    {isChatLoading && (
+                      <Loader2 className="inline-block animate-spin mr-2" size={16} />
+                    )}
                     {t('chat.newChat', 'New Chat')}
                   </button>
                 </div>
@@ -491,20 +674,48 @@ export default function Chat() {
                         <div key={chat.id} className="history-item">
                           <button
                             onClick={() => loadChat(chat)}
-                            className={`history-item-button ${currentChatId === chat.id ? 'active' : ''}`}
+                            disabled={loadingChatId === chat.chat_id}
+                            className={`history-item-button ${currentChatId === chat.id || currentChatId === chat.chat_id ? 'active' : ''} ${loadingChatId === chat.chat_id ? 'loading' : ''}`}
                           >
-                            <div className="history-item-title">{chat.title}</div>
-                            <div className="history-item-date">
-                              {new Date(chat.timestamp).toLocaleDateString()}
+                            <div className="history-item-content">
+                              <div className="history-item-title">
+                                {loadingChatId === chat.chat_id && (
+                                  <Loader2 className="inline-block animate-spin mr-2 text-saffron" size={14} />
+                                )}
+                                {chat.title}
+                              </div>
+                              <div className="history-item-time">
+                                {formatTime(chat.timestamp)}
+                              </div>
                             </div>
                           </button>
-                          <button
-                            onClick={() => deleteChat(chat.id)}
-                            className="delete-chat-button"
-                            title={t('chat.delete', 'Delete chat')}
-                          >
-                            <X size={16} />
-                          </button>
+                          <div className="chat-menu-container">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setOpenDropdownId(openDropdownId === chat.id ? null : chat.id)
+                              }}
+                              className="chat-menu-button"
+                              title={t('chat.options', 'Options')}
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+                            {openDropdownId === chat.id && (
+                              <div className="chat-dropdown-menu">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    deleteChat(chat.id)
+                                    setOpenDropdownId(null)
+                                  }}
+                                  className="dropdown-item delete-item"
+                                >
+                                  <X size={14} />
+                                  {t('chat.delete', 'Delete')}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))
                     ) : (
@@ -621,7 +832,7 @@ export default function Chat() {
             <div className="chat-status">
               {currentChatId && (
                 <span className="current-chat-indicator">
-                  {t('chat.activeChat', 'Active Chat')}
+                  {t('chat.activeChat', 'Active Chat')}: {currentChatId}
                 </span>
               )}
               {responseTime && (
@@ -660,6 +871,27 @@ export default function Chat() {
         
         {/* Messages Container */}
         <div className="chatgpt-messages-fullscreen">
+          {/* Chat Loading Overlay */}
+          <AnimatePresence>
+            {isChatLoading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="chat-loading-overlay"
+              >
+                <div className="chat-loading-content">
+                  <div className="chat-loading-spinner">
+                    <Loader2 className="animate-spin text-saffron" size={32} />
+                  </div>
+                  <h3 className="chat-loading-title">{t('chat.loadingChat', 'Loading Chat...')}</h3>
+                  <p className="chat-loading-subtitle">{t('chat.loadingMessages', 'Fetching your conversation history')}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {messages.length === 0 ? (
             /* Welcome Screen */
             <div className="chatgpt-welcome-fullscreen">
@@ -711,7 +943,7 @@ export default function Chat() {
                             {message.role === 'user' ? t('chat.you', 'You') : 'Deep-Shiva'}
                           </span>
                           <span className="message-time">
-                            {message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : ''}
+                            {message.timestamp ? formatTime(message.timestamp) : ''}
                           </span>
                         </div>
                         <div className="message-text-fullscreen">
@@ -815,6 +1047,7 @@ export default function Chat() {
                   disabled={isLoading || !input.trim() || isListening}
                   className="send-button-fullscreen"
                   title={t('chat.send', 'Send message')}
+
                 >
                   {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
                 </button>
