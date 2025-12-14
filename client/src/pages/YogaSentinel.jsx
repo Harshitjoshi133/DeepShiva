@@ -1,42 +1,112 @@
 import { useState, useRef } from 'react'
 import Webcam from 'react-webcam'
-import { Camera, Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Camera, Loader2, CheckCircle, AlertTriangle, Upload, X, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
+import yogaService from '../services/yogaService'
+import '../styles/YogaSentinel.css'
 
 export default function YogaSentinel() {
   const { t } = useLanguage()
   const webcamRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const [mode, setMode] = useState('camera') // 'camera' or 'upload'
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [feedback, setFeedback] = useState(null)
   const [cameraError, setCameraError] = useState(false)
+  const [capturedImage, setCapturedImage] = useState(null)
+  const [uploadedImage, setUploadedImage] = useState(null)
 
-  const captureAndAnalyze = async () => {
+
+  const captureImage = () => {
     if (!webcamRef.current) return
+    
+    const imageSrc = webcamRef.current.getScreenshot()
+    setCapturedImage(imageSrc)
+    setFeedback(null) // Clear previous feedback
+  }
 
+  const analyzeImage = async (imageData) => {
     setIsAnalyzing(true)
     setFeedback(null)
 
     try {
-      const imageSrc = webcamRef.current.getScreenshot()
-      const base64Image = imageSrc.split(',')[1]
-
-      const response = await fetch('/api/v1/vision/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image })
+      // Extract base64 image data
+      const base64Image = imageData.split(',')[1]
+      
+      // Use the yoga service for analysis
+      const result = await yogaService.analyzePose(base64Image, 'auto')
+      
+      // Set the feedback with the analysis result
+      setFeedback(result)
+      
+      // Log successful analysis
+      console.log('Yoga pose analysis completed:', {
+        pose: result.detected_pose,
+        status: result.status,
+        score: result.pose_score
       })
-
-      const data = await response.json()
-      setFeedback(data)
+      
     } catch (error) {
+      console.error('Yoga pose analysis failed:', error)
+      
+      // Set error feedback
       setFeedback({
         status: 'Error',
-        feedback: 'Failed to analyze pose. Please try again.',
-        confidence: 0
+        feedback: 'Failed to analyze pose. Please check your connection and try again.',
+        confidence: 0,
+        detected_pose: 'Unknown',
+        corrections: ['Check your internet connection', 'Ensure good lighting', 'Try again'],
+        pose_score: 0,
+        body_parts_detected: [],
+        recommendations: ['Try again later', 'Check network connection']
       })
     } finally {
       setIsAnalyzing(false)
+    }
+  }
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0]
+    
+    if (!file) return
+    
+    // Validate the image file
+    const validation = yogaService.validateImage(file)
+    if (!validation.valid) {
+      alert(validation.error)
+      return
+    }
+    
+    // Read and set the uploaded image
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setUploadedImage(e.target.result)
+      setFeedback(null) // Clear previous feedback
+    }
+    reader.onerror = () => {
+      alert('Failed to read the image file. Please try again.')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const confirmAndAnalyze = () => {
+    const imageToAnalyze = capturedImage || uploadedImage
+    if (imageToAnalyze) {
+      analyzeImage(imageToAnalyze)
+    }
+  }
+
+  const retakeImage = () => {
+    setCapturedImage(null)
+    setFeedback(null)
+  }
+
+  const reselectImage = () => {
+    setUploadedImage(null)
+    setFeedback(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -44,111 +114,309 @@ export default function YogaSentinel() {
     setCameraError(true)
   }
 
+  const handleModeChange = (newMode) => {
+    // Clear all images and feedback when switching modes
+    setCapturedImage(null)
+    setUploadedImage(null)
+    setFeedback(null)
+    setIsAnalyzing(false)
+    
+    // Clear file input if switching away from upload mode
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    
+    setMode(newMode)
+  }
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="glass-card shadow-2xl">
-        <h2 className="text-xl font-bold gradient-text mb-3">{t('yoga.title', 'Yoga Sentinel')}</h2>
-        <p className="text-gray-600 mb-3 text-sm">
-          {t('yoga.description', 'Position yourself in front of the camera and click "Analyze Pose" for real-time feedback on your yoga posture.')}
+    <div className="yoga-container">
+      <div className="yoga-card">
+        <h2 className="yoga-title">{t('yoga.title', 'Yoga Sentinel')}</h2>
+        <p className="yoga-description">
+          {t('yoga.description', 'Choose your preferred method to analyze your yoga pose and get real-time feedback.')}
         </p>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* Camera Feed */}
-          <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
-            {cameraError ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
-                <AlertTriangle size={40} className="mb-3 text-yellow-500" />
-                <h3 className="text-lg font-semibold mb-2">{t('yoga.cameraRequired', 'Camera Access Required')}</h3>
-                <p className="text-gray-300 text-sm">
-                  {t('yoga.cameraMessage', 'Please allow camera access in your browser settings to use Yoga Sentinel.')}
-                </p>
-              </div>
-            ) : (
-              <>
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  screenshotFormat="image/jpeg"
-                  className="w-full h-full object-cover"
-                  onUserMediaError={handleUserMediaError}
+        {/* Mode Selection */}
+        <div className="mode-selector">
+          <button
+            onClick={() => handleModeChange('camera')}
+            className={`mode-button ${mode === 'camera' ? 'active' : 'inactive'}`}
+          >
+            <Camera size={16} />
+            {t('yoga.analyzeMode', 'Analyze Pose')}
+          </button>
+          <button
+            onClick={() => handleModeChange('upload')}
+            className={`mode-button ${mode === 'upload' ? 'active' : 'inactive'}`}
+          >
+            <Upload size={16} />
+            {t('yoga.uploadMode', 'Upload Image')}
+          </button>
+        </div>
+
+        <div className="yoga-grid">
+          {/* Camera/Upload Area */}
+          <div className="camera-container">
+            {/* Show captured image only in camera mode */}
+            {mode === 'camera' && capturedImage ? (
+              <div className="captured-image-container">
+                <img
+                  src={capturedImage}
+                  alt="Captured pose"
+                  className="image-preview"
                 />
-                
-                {/* Skeleton Overlay Guide */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-30">
-                  <circle cx="50%" cy="20%" r="30" fill="none" stroke="#FF9933" strokeWidth="2" />
-                  <line x1="50%" y1="25%" x2="50%" y2="45%" stroke="#FF9933" strokeWidth="2" />
-                  <line x1="50%" y1="35%" x2="35%" y2="50%" stroke="#FF9933" strokeWidth="2" />
-                  <line x1="50%" y1="35%" x2="65%" y2="50%" stroke="#FF9933" strokeWidth="2" />
-                  <line x1="50%" y1="45%" x2="40%" y2="70%" stroke="#FF9933" strokeWidth="2" />
-                  <line x1="50%" y1="45%" x2="60%" y2="70%" stroke="#FF9933" strokeWidth="2" />
-                </svg>
-              </>
+                <div className="image-overlay">
+                  <p className="image-overlay-text">{t('yoga.capturedImage', 'Captured Image')}</p>
+                </div>
+              </div>
+            ) : mode === 'upload' && uploadedImage ? (
+              <div className="captured-image-container">
+                <img
+                  src={uploadedImage}
+                  alt="Uploaded pose"
+                  className="image-preview"
+                />
+                <div className="image-overlay">
+                  <p className="image-overlay-text">{t('yoga.uploadedImage', 'Uploaded Image')}</p>
+                </div>
+              </div>
+            ) : mode === 'camera' ? (
+              cameraError ? (
+                <div className="camera-error">
+                  <AlertTriangle size={40} className="camera-error-icon" />
+                  <h3 className="camera-error-title">{t('yoga.cameraRequired', 'Camera Access Required')}</h3>
+                  <p className="camera-error-message">
+                    {t('yoga.cameraMessage', 'Please allow camera access in your browser settings to use Yoga Sentinel.')}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    className="webcam"
+                    onUserMediaError={handleUserMediaError}
+                  />
+                  
+                  {/* Skeleton Overlay Guide */}
+                  <svg className="skeleton-overlay">
+                    <circle cx="50%" cy="20%" r="30" />
+                    <line x1="50%" y1="25%" x2="50%" y2="45%" />
+                    <line x1="50%" y1="35%" x2="35%" y2="50%" />
+                    <line x1="50%" y1="35%" x2="65%" y2="50%" />
+                    <line x1="50%" y1="45%" x2="40%" y2="70%" />
+                    <line x1="50%" y1="45%" x2="60%" y2="70%" />
+                  </svg>
+                </>
+              )
+            ) : (
+              <div 
+                className="upload-area"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.add('dragover')
+                }}
+                onDragLeave={(e) => {
+                  e.currentTarget.classList.remove('dragover')
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.remove('dragover')
+                  const files = e.dataTransfer.files
+                  if (files[0]) {
+                    const event = { target: { files } }
+                    handleImageUpload(event)
+                  }
+                }}
+              >
+                <Upload size={48} className="upload-icon" />
+                <p className="upload-text">{t('yoga.uploadText', 'Click to upload or drag and drop')}</p>
+                <p className="upload-subtext">{t('yoga.uploadSubtext', 'PNG, JPG, GIF up to 10MB')}</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden-input"
+                />
+              </div>
             )}
           </div>
 
           {/* Feedback Panel */}
-          <div className="space-y-2">
-            <button
-              onClick={captureAndAnalyze}
-              disabled={isAnalyzing || cameraError}
-              className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  {t('yoga.analyzing', 'Analyzing...')}
-                </>
-              ) : (
-                <>
+          <div className="feedback-panel">
+            {/* Action Buttons */}
+            {mode === 'camera' && capturedImage ? (
+              <div className="action-buttons">
+                <button
+                  onClick={confirmAndAnalyze}
+                  disabled={isAnalyzing}
+                  className="analyze-button"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="loading-spinner" size={20} />
+                      {t('yoga.analyzing', 'Analyzing...')}
+                    </>
+                  ) : (
+                    <>
+                      <Check size={20} />
+                      {t('yoga.analyzeThisImage', 'Analyze This Image')}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={retakeImage}
+                  disabled={isAnalyzing}
+                  className="retake-button"
+                >
                   <Camera size={20} />
-                  {t('yoga.analyzePose', 'Analyze Pose')}
-                </>
-              )}
-            </button>
+                  {t('yoga.retakeImage', 'Retake Image')}
+                </button>
+              </div>
+            ) : mode === 'upload' && uploadedImage ? (
+              <div className="action-buttons">
+                <button
+                  onClick={confirmAndAnalyze}
+                  disabled={isAnalyzing}
+                  className="analyze-button"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="loading-spinner" size={20} />
+                      {t('yoga.analyzing', 'Analyzing...')}
+                    </>
+                  ) : (
+                    <>
+                      <Check size={20} />
+                      {t('yoga.analyzeThisImage', 'Analyze This Image')}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={reselectImage}
+                  disabled={isAnalyzing}
+                  className="retake-button"
+                >
+                  <Upload size={20} />
+                  {t('yoga.selectDifferentImage', 'Select Different Image')}
+                </button>
+              </div>
+            ) : mode === 'camera' ? (
+              <button
+                onClick={captureImage}
+                disabled={isAnalyzing || cameraError}
+                className="analyze-button"
+              >
+                <Camera size={20} />
+                {t('yoga.captureImage', 'Capture Image')}
+              </button>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="upload-button"
+              >
+                <Upload size={20} />
+                {t('yoga.selectImage', 'Select Image')}
+              </button>
+            )}
 
             {feedback && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`glass-card ${
-                  feedback.status === 'Perfect' 
-                    ? 'bg-green-100/80 border-2 border-green-500/30' 
-                    : 'bg-orange-100/80 border-2 border-orange-500/30'
-                } shadow-xl`}
+                className={`feedback-card ${
+                  feedback.status === 'Perfect' || feedback.status === 'Excellent' 
+                    ? 'success' 
+                    : feedback.status === 'Vision Model Not Found'
+                    ? 'vision-error'
+                    : feedback.status === 'Error' || feedback.status === 'Unsafe'
+                    ? 'error'
+                    : 'warning'
+                } fade-in`}
               >
-                <div className="flex items-start gap-2 mb-3">
-                  {feedback.status === 'Perfect' ? (
-                    <CheckCircle size={24} className="text-green-600 flex-shrink-0" />
+                <div className="feedback-header">
+                  {feedback.status === 'Perfect' || feedback.status === 'Excellent' ? (
+                    <CheckCircle size={24} className="feedback-icon success" />
                   ) : (
-                    <AlertTriangle size={24} className="text-orange-600 flex-shrink-0" />
+                    <AlertTriangle size={24} className="feedback-icon warning" />
                   )}
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-1">{feedback.status}</h3>
-                    <p className="text-gray-700 text-sm">{feedback.feedback}</p>
+                    <h3 className="feedback-status">
+                      {feedback.detected_pose && feedback.detected_pose !== 'Unknown' 
+                        ? `${feedback.detected_pose} - ${feedback.status}`
+                        : feedback.status
+                      }
+                    </h3>
+                    <p className="feedback-message">{feedback.feedback}</p>
                   </div>
                 </div>
                 
-                <div className="mt-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-semibold text-gray-700">{t('yoga.confidence', 'Confidence')}</span>
-                    <span className="text-xs font-bold text-gray-800">
+                {/* Pose Score */}
+                {feedback.pose_score !== undefined && (
+                  <div className="score-section">
+                    <div className="score-header">
+                      <span className="score-label">{t('yoga.poseScore', 'Pose Score')}</span>
+                      <span className="score-value">{feedback.pose_score}/100</span>
+                    </div>
+                    <div className="score-bar">
+                      <div
+                        className="score-fill"
+                        style={{ width: `${feedback.pose_score}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {/* Confidence */}
+                <div className="confidence-section">
+                  <div className="confidence-header">
+                    <span className="confidence-label">{t('yoga.confidence', 'Confidence')}</span>
+                    <span className="confidence-value">
                       {Math.round(feedback.confidence * 100)}%
                     </span>
                   </div>
-                  <div className="w-full bg-gray-300 rounded-full h-2">
+                  <div className="confidence-bar">
                     <div
-                      className="bg-saffron h-2 rounded-full transition-all duration-500"
+                      className="confidence-fill"
                       style={{ width: `${feedback.confidence * 100}%` }}
                     />
                   </div>
                 </div>
+
+                {/* Corrections */}
+                {feedback.corrections && feedback.corrections.length > 0 && (
+                  <div className="corrections-section">
+                    <h4 className="corrections-title">{t('yoga.corrections', 'Corrections:')}</h4>
+                    <ul className="corrections-list">
+                      {feedback.corrections.slice(0, 4).map((correction, index) => (
+                        <li key={index} className="correction-item">{correction}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {feedback.recommendations && feedback.recommendations.length > 0 && (
+                  <div className="recommendations-section">
+                    <h4 className="recommendations-title">{t('yoga.recommendations', 'Recommendations:')}</h4>
+                    <ul className="recommendations-list">
+                      {feedback.recommendations.slice(0, 3).map((recommendation, index) => (
+                        <li key={index} className="recommendation-item">{recommendation}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </motion.div>
             )}
 
             {/* Tips */}
-            <div className="glass-card bg-blue-50/80 border-2 border-blue-200/30">
-              <h4 className="font-semibold text-gray-800 mb-2 text-sm">{t('yoga.tipsTitle', 'Tips for Best Results:')}</h4>
-              <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
+            <div className="tips-card">
+              <h4 className="tips-title">{t('yoga.tipsTitle', 'Tips for Best Results:')}</h4>
+              <ul className="tips-list">
                 <li>{t('yoga.tips.lighting', 'Ensure good lighting')}</li>
                 <li>{t('yoga.tips.distance', 'Stand 6-8 feet from camera')}</li>
                 <li>{t('yoga.tips.clothing', 'Wear contrasting clothing')}</li>
@@ -157,6 +425,8 @@ export default function YogaSentinel() {
             </div>
           </div>
         </div>
+
+
       </div>
     </div>
   )

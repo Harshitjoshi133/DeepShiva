@@ -31,12 +31,59 @@ class OllamaService:
         
         logger.info(f"Ollama service initialized - Host: {self.host}, Model: {self.model}, Timeout: {self.timeout}")
     
+    def _extract_model_names(self, models_response: Dict[str, Any]) -> List[str]:
+        """
+        Safely extract model names from Ollama response
+        Handles different response structures
+        """
+        available_models = []
+        
+        try:
+            models_list = models_response.get('models', [])
+            
+            for model in models_list:
+                model_name = None
+                
+                if isinstance(model, dict):
+                    # Try different possible keys for model name
+                    for key in ['name', 'model', 'id', 'model_name', 'title']:
+                        if key in model and model[key]:
+                            model_name = str(model[key])
+                            break
+                elif isinstance(model, str):
+                    # If model is just a string
+                    model_name = model
+                
+                if model_name:
+                    available_models.append(model_name)
+                    
+        except Exception as e:
+            logger.error(f"Error extracting model names: {str(e)}")
+            
+        return available_models
+    
     async def check_connection(self) -> bool:
         """Check if Ollama server is accessible"""
         try:
             # Test connection by listing models
             models = await asyncio.to_thread(self.client.list)
-            logger.info(f"Ollama connection successful - Available models: {len(models.get('models', []))}")
+            
+            # Debug: Log the actual response structure
+            logger.debug(f"Ollama list response structure: {type(models)}")
+            logger.debug(f"Ollama list response keys: {list(models.keys()) if isinstance(models, dict) else 'Not a dict'}")
+            
+            models_count = len(models.get('models', [])) if isinstance(models, dict) else 0
+            logger.info(f"Ollama connection successful - Available models: {models_count}")
+            
+            # Debug: Log first model structure if available
+            if isinstance(models, dict) and 'models' in models and models['models']:
+                first_model = models['models'][0]
+                logger.debug(f"First model structure: {type(first_model)}")
+                if isinstance(first_model, dict):
+                    logger.debug(f"First model keys: {list(first_model.keys())}")
+                else:
+                    logger.debug(f"First model value: {first_model}")
+            
             return True
         except Exception as e:
             logger.error(f"Ollama connection failed - Host: {self.host}, Error: {str(e)}")
@@ -46,7 +93,9 @@ class OllamaService:
         """Check if the configured model is available"""
         try:
             models = await asyncio.to_thread(self.client.list)
-            available_models = [model['name'] for model in models.get('models', [])]
+            available_models = self._extract_model_names(models)
+            
+            logger.debug(f"Available models: {available_models}")
             
             if self.model in available_models:
                 logger.info(f"Model is available - Model: {self.model}")
@@ -54,7 +103,9 @@ class OllamaService:
             else:
                 logger.warning(f"Model not found - Requested: {self.model}, Available: {available_models}")
                 return False
+                
         except Exception as e:
+            logger.error(f"Error checking model availability: {str(e)}")
             error_tracker.log_external_api_error(e, "Ollama", "list_models")
             return False
     
@@ -294,17 +345,152 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
             error_tracker.log_external_api_error(e, "Ollama", "pull_model")
             return False
     
+    async def analyze_image_with_vision_model(
+        self,
+        base64_image: str,
+        prompt: str,
+        user_id: str,
+        vision_model: str = "llava:latest"
+    ) -> Dict[str, Any]:
+        """
+        Analyze image using vision model (LLaVA or similar)
+        
+        Args:
+            base64_image: Base64 encoded image
+            prompt: Analysis prompt
+            user_id: User identifier
+            vision_model: Vision model to use (default: llava:latest)
+            
+        Returns:
+            Dict containing analysis response and metadata
+        """
+        start_time = datetime.now()
+        
+        try:
+            logger.info(f"Analyzing image with vision model - User: {user_id}, Model: {vision_model}, Prompt Length: {len(prompt)}")
+            
+            # Console logging for image analysis
+            print(f"\n{'='*80}")
+            print(f"👁️ [VISION ANALYSIS] User: {user_id}")
+            print(f"{'='*80}")
+            print(f"🤖 Model: {vision_model}")
+            print(f"📝 Prompt: {prompt[:200]}...")
+            print(f"🖼️ Image: Base64 data ({len(base64_image)} chars)")
+            print(f"{'='*80}")
+            print(f"⏳ Processing image analysis...")
+            
+            # Generate response using Ollama vision model
+            response = await asyncio.to_thread(
+                self.client.generate,
+                model=vision_model,
+                prompt=prompt,
+                images=[base64_image],  # Pass image as base64
+                options={
+                    "temperature": 0.3,  # Lower temperature for more consistent analysis
+                    "num_predict": 1000,  # Limit response length
+                }
+            )
+            
+            # Extract response content
+            ai_response = response.get('response', '')
+            
+            # Calculate processing time
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            
+            # Log successful response
+            logger.info(f"Vision analysis completed - User: {user_id}, Response Length: {len(ai_response)}, Time: {round(processing_time, 2)}ms")
+            
+            # Console output for vision analysis result
+            print(f"\n{'='*80}")
+            print(f"👁️ [VISION RESULT] Model: {vision_model} | Time: {processing_time:.1f}ms")
+            print(f"{'='*80}")
+            print(f"{ai_response}")
+            print(f"{'='*80}\n")
+            
+            # Log detailed vision analysis
+            ai_response_logger.log_ai_response(
+                user_id=user_id,
+                message_id=f"vision_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{user_id[:8]}",
+                user_message=f"Image analysis: {prompt[:100]}...",
+                ai_response=ai_response,
+                model_used=vision_model,
+                processing_time_ms=round(processing_time, 2),
+                language="en",
+                context="yoga_pose_analysis",
+                success=True
+            )
+            
+            return {
+                "response": ai_response,
+                "model": vision_model,
+                "processing_time_ms": round(processing_time, 2),
+                "timestamp": datetime.now().isoformat(),
+                "success": True,
+                "metadata": {
+                    "analysis_type": "vision",
+                    "image_size": len(base64_image),
+                    "prompt_length": len(prompt)
+                }
+            }
+            
+        except Exception as e:
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            
+            error_tracker.log_external_api_error(e, "Ollama", "vision_analysis")
+            
+            logger.error(f"Vision analysis failed - User: {user_id}, Error: {str(e)}, Time: {round(processing_time, 2)}ms")
+            
+            # Console output for vision error
+            print(f"\n{'='*80}")
+            print(f"❌ [VISION ERROR] {str(e)}")
+            print(f"{'='*80}")
+            print(f"🔄 Vision analysis failed, will use fallback")
+            print(f"{'='*80}\n")
+            
+            # Log vision error
+            ai_response_logger.log_ai_error(
+                user_id=user_id,
+                user_message=f"Image analysis: {prompt[:100]}...",
+                error_message=str(e),
+                fallback_response="Vision analysis unavailable",
+                model_attempted=vision_model
+            )
+            
+            return {
+                "response": "",
+                "model": vision_model,
+                "processing_time_ms": round(processing_time, 2),
+                "timestamp": datetime.now().isoformat(),
+                "success": False,
+                "error": str(e),
+                "metadata": {
+                    "analysis_type": "vision",
+                    "fallback_used": True
+                }
+            }
+
     async def get_model_info(self) -> Dict[str, Any]:
         """Get information about the current model"""
         try:
             models = await asyncio.to_thread(self.client.list)
             
             for model in models.get('models', []):
-                if model['name'] == self.model:
+                # Extract model name safely
+                model_name = None
+                if isinstance(model, dict):
+                    # Try different possible keys
+                    for key in ['name', 'model', 'id', 'model_name', 'title']:
+                        if key in model and model[key]:
+                            model_name = str(model[key])
+                            break
+                elif isinstance(model, str):
+                    model_name = model
+                
+                if model_name == self.model:
                     return {
-                        "name": model['name'],
-                        "size": model.get('size', 0),
-                        "modified_at": model.get('modified_at', ''),
+                        "name": model_name,
+                        "size": model.get('size', 0) if isinstance(model, dict) else 0,
+                        "modified_at": model.get('modified_at', '') if isinstance(model, dict) else '',
                         "available": True
                     }
             
@@ -315,12 +501,33 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
             }
             
         except Exception as e:
+            logger.error(f"Error getting model info: {str(e)}")
             error_tracker.log_external_api_error(e, "Ollama", "model_info")
             return {
                 "name": self.model,
                 "available": False,
                 "error": str(e)
             }
+    
+    async def check_vision_model_availability(self, vision_model: str = "llava:latest") -> bool:
+        """Check if a vision model is available"""
+        try:
+            models = await asyncio.to_thread(self.client.list)
+            available_models = self._extract_model_names(models)
+            
+            logger.debug(f"Available models for vision check: {available_models}")
+            
+            if vision_model in available_models:
+                logger.info(f"Vision model is available - Model: {vision_model}")
+                return True
+            else:
+                logger.warning(f"Vision model not found - Requested: {vision_model}, Available: {available_models}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking vision model availability: {str(e)}")
+            error_tracker.log_external_api_error(e, "Ollama", "check_vision_model")
+            return False
 
 # Global service instance
 ollama_service = OllamaService()

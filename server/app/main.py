@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routers import chat, vision, tourism, culture, database, monitoring
+from app.routers import chat, vision, tourism, culture, database, monitoring, yoga
 from app.database import engine
 from app.models import Base
 from app.logging_config import setup_logging, get_logger
@@ -71,6 +71,7 @@ app.add_middleware(
 # Include routers
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(vision.router, prefix="/api/v1/vision", tags=["Vision"])
+app.include_router(yoga.router, prefix="/api/v1/yoga", tags=["Yoga"])
 app.include_router(tourism.router, prefix="/api/v1/tourism", tags=["Tourism"])
 app.include_router(culture.router, prefix="/api/v1/culture", tags=["Culture"])
 app.include_router(database.router, prefix="/api/v1/database", tags=["Database"])
@@ -99,6 +100,7 @@ async def root(request: Request):
         "endpoints": {
             "chat": "/api/v1/chat/",
             "vision": "/api/v1/vision/",
+            "yoga": "/api/v1/yoga/",
             "tourism": "/api/v1/tourism/",
             "culture": "/api/v1/culture/",
             "database": "/api/v1/database/",
@@ -139,7 +141,8 @@ async def health_check(request: Request):
         "request_id": request_id,
         "services": {
             "chat": "operational",
-            "vision": "operational", 
+            "vision": "operational",
+            "yoga": "operational",
             "tourism": "operational",
             "culture": "operational",
             "database": db_status
