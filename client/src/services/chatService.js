@@ -82,7 +82,7 @@ export const createNewChatSession = async (userId, language) => {
  * @param {boolean} isNewChat - Whether this is a new chat
  * @returns {Promise<Object>} Response with AI reply and metadata
  */
-export const sendChatMessage = async (message, userId, language, isNewChat = false) => {
+export const sendChatMessage = async (message, userId, language, isNewChat = false, chatId = null) => {
   const startTime = Date.now();
   
   try {
@@ -91,18 +91,26 @@ export const sendChatMessage = async (message, userId, language, isNewChat = fal
       userId, 
       language, 
       isNewChat,
+      chatId,
       endpoint: '/api/v1/chat/query'
     });
+    
+    const requestBody = { 
+      message: message, 
+      user_id: userId,
+      language: language,
+      is_new_chat: isNewChat
+    };
+    
+    // Add chat_id if provided (ensure it's a string)
+    if (chatId) {
+      requestBody.chat_id = String(chatId);
+    }
     
     const response = await fetch(`${API_BASE_URL}/chat/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        message: message, 
-        user_id: userId,
-        language: language,
-        is_new_chat: isNewChat
-      })
+      body: JSON.stringify(requestBody)
     });
     
     const responseTime = Date.now() - startTime;
@@ -133,11 +141,14 @@ export const sendChatMessage = async (message, userId, language, isNewChat = fal
     console.log('✅ Message sent successfully:', {
       messageId: data.message_id,
       chatId: data.chat_id,
+      requestedChatId: chatId,
       processingTime: data.processing_time_seconds + 's',
       modelUsed: data.model_used,
       responseLength: data.response?.length || 0,
       contextUsed: data.context_used,
-      totalTime: `${responseTime}ms`
+      totalTime: `${responseTime}ms`,
+      isNewChat: isNewChat,
+      userId: userId
     });
     
     return data;

@@ -4,8 +4,8 @@ Provides async database operations and detailed request/response logging
 """
 
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Any, Union
 import time
 import asyncio
 from datetime import datetime
@@ -20,6 +20,48 @@ from ..services.ollama_service import ollama_service
 from ..database import get_async_db, test_async_database_connection
 from ..models import User, Chat, ChatMessage
 
+async def cleanup_multiple_active_chats(db: AsyncSession, user_id: int, keep_chat_id: int = None):
+    """Clean up multiple active chats by keeping only the most recent one or a specific one"""
+    try:
+        # Get all active chats for the user
+        active_chats_query = select(Chat).where(
+            Chat.user_id == user_id,
+            Chat.is_active == True
+        ).order_by(Chat.last_activity.desc())
+        
+        result = await db.execute(active_chats_query)
+        active_chats = result.scalars().all()
+        
+        if len(active_chats) <= 1:
+            return  # No cleanup needed
+        
+        logger.info(f"🧹 CLEANING UP MULTIPLE ACTIVE CHATS - User: {user_id}, Total: {len(active_chats)}")
+        
+        # Determine which chat to keep
+        if keep_chat_id:
+            # Keep the specified chat
+            chat_to_keep = next((chat for chat in active_chats if chat.id == keep_chat_id), None)
+            if not chat_to_keep:
+                # If specified chat not found, keep the most recent
+                chat_to_keep = active_chats[0]
+        else:
+            # Keep the most recent (first in the ordered list)
+            chat_to_keep = active_chats[0]
+        
+        # Deactivate all other chats
+        chats_to_deactivate = [chat for chat in active_chats if chat.id != chat_to_keep.id]
+        
+        for chat in chats_to_deactivate:
+            chat.is_active = False
+            logger.info(f"   Deactivating chat: ID={chat.id}, Messages={chat.message_count}")
+        
+        await db.commit()
+        logger.info(f"✅ CLEANUP COMPLETED - Kept chat: ID={chat_to_keep.id}, Deactivated: {len(chats_to_deactivate)}")
+        
+    except Exception as e:
+        logger.error(f"❌ CLEANUP FAILED - User: {user_id}, Error: {str(e)}")
+        await db.rollback()
+
 router = APIRouter()
 logger = get_logger("chat")
 error_tracker = ErrorTracker(logger)
@@ -32,6 +74,14 @@ class ChatRequest(BaseModel):
     context: Optional[str] = Field(None, description="Additional context for the query")
     language: Optional[str] = Field("en", description="Preferred response language")
     is_new_chat: Optional[bool] = Field(False, description="Indicates if this is the first message in a new chat")
+    chat_id: Optional[Union[str, int]] = Field(None, description="Specific chat ID to use for this message")
+    
+    @validator('chat_id', pre=True)
+    def convert_chat_id_to_string(cls, v):
+        """Convert chat_id to string if it's provided as an integer"""
+        if v is not None:
+            return str(v)
+        return v
 
 class ChatResponse(BaseModel):
     response: str
@@ -187,7 +237,26 @@ async def chat_query(request: ChatRequest, http_request: Request, db: AsyncSessi
         chat_session_start = time.time()
         active_chat = None
         
-        if request.is_new_chat:
+        # If a specific chat_id is provided, try to use that chat first
+        if request.chat_id:
+            try:
+                chat_id_int = int(request.chat_id)
+                specific_chat_query = select(Chat).where(
+                    Chat.id == chat_id_int,
+                    Chat.user_id == user.id,
+                )
+                specific_chat_result = await db.execute(specific_chat_query)
+                active_chat = specific_chat_result.scalar_one_or_none()
+                
+                if active_chat:
+                    logger.info(f"🎯 USING SPECIFIC CHAT - Request ID: {request_id}, Chat ID: {active_chat.id}, Title: {active_chat.title}")
+                else:
+                    logger.warning(f"⚠️ SPECIFIC CHAT NOT FOUND - Request ID: {request_id}, Requested Chat ID: {request.chat_id}")
+            except (ValueError, TypeError):
+                logger.warning(f"⚠️ INVALID CHAT ID FORMAT - Request ID: {request_id}, Chat ID: {request.chat_id}")
+        
+        # If no specific chat found or provided, use the normal logic
+        if not active_chat and request.is_new_chat:
             chat_type = _determine_chat_type(request.message)
             logger.info(f"🆕 CREATING NEW CHAT SESSION - Request ID: {request_id}, User: {target_user_id}, Chat Type: {chat_type}")
             
@@ -198,7 +267,22 @@ async def chat_query(request: ChatRequest, http_request: Request, db: AsyncSessi
             ).order_by(Chat.last_activity.desc())
             
             existing_result = await db.execute(existing_chat_query)
-            active_chat = existing_result.scalar_one_or_none()
+            all_active_chats = existing_result.scalars().all()
+            
+            # Log if multiple active chats found and clean up
+            if len(all_active_chats) > 1:
+                logger.warning(f"⚠️ MULTIPLE ACTIVE CHATS FOUND - Request ID: {request_id}, User: {target_user_id}, Count: {len(all_active_chats)}")
+                for i, chat in enumerate(all_active_chats):
+                    logger.warning(f"   Chat {i+1}: ID={chat.id}, Messages={chat.message_count}, Last Activity={chat.last_activity}")
+                
+                # Clean up multiple active chats
+                await cleanup_multiple_active_chats(db, user.id)
+                
+                # Re-query to get the remaining active chat
+                existing_result = await db.execute(existing_chat_query)
+                all_active_chats = existing_result.scalars().all()
+            
+            active_chat = all_active_chats[0] if all_active_chats else None
             
             if active_chat and active_chat.message_count == 0:
                 # Update existing empty chat
@@ -237,15 +321,30 @@ async def chat_query(request: ChatRequest, http_request: Request, db: AsyncSessi
                 db.add(active_chat)
                 await db.commit()
                 await db.refresh(active_chat)
-        else:
-            # Get existing active chat session
+        elif not active_chat:
+            # Get existing active chat session (only if no specific chat was found)
             active_chat_query = select(Chat).where(
                 Chat.user_id == user.id,
                 Chat.is_active == True
             ).order_by(Chat.last_activity.desc())
             
             active_chat_result = await db.execute(active_chat_query)
-            active_chat = active_chat_result.scalar_one_or_none()
+            all_active_chats = active_chat_result.scalars().all()
+            
+            # Log if multiple active chats found and clean up
+            if len(all_active_chats) > 1:
+                logger.warning(f"⚠️ MULTIPLE ACTIVE CHATS FOUND - Request ID: {request_id}, User: {target_user_id}, Count: {len(all_active_chats)}")
+                for i, chat in enumerate(all_active_chats):
+                    logger.warning(f"   Chat {i+1}: ID={chat.id}, Messages={chat.message_count}, Last Activity={chat.last_activity}")
+                
+                # Clean up multiple active chats
+                await cleanup_multiple_active_chats(db, user.id)
+                
+                # Re-query to get the remaining active chat
+                active_chat_result = await db.execute(active_chat_query)
+                all_active_chats = active_chat_result.scalars().all()
+            
+            active_chat = all_active_chats[0] if all_active_chats else None
             
             if not active_chat or (datetime.now() - active_chat.last_activity.replace(tzinfo=None)).total_seconds() > 3600:
                 # Create new chat if none exists or too old

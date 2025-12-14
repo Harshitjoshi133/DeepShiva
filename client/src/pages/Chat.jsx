@@ -347,20 +347,30 @@ export default function Chat() {
       setMessages([])
       setCurrentChatId(null)
       
+      console.log('🆕 Creating new chat session for user:', userId)
+      
       // Create new chat session using the service
       const data = await chatService.createNewChatSession(userId, language)
-      setCurrentChatId(data.chat_id)
-      console.log('New chat session created:', data.chat_id)
       
-      // Refresh chat sessions list
+      console.log('✅ New chat session created:', {
+        chat_id: data.chat_id,
+        session_id: data.session_id,
+        title: data.title,
+        status: data.status
+      })
+      
+      setCurrentChatId(data.chat_id)
+      
+      // Refresh chat sessions list after a short delay
       setTimeout(() => {
         loadChatSessions()
       }, 500)
       
     } catch (error) {
-      console.error('Error creating new chat session:', error)
+      console.error('❌ Error creating new chat session:', error)
       // Fallback to temporary ID
       const tempChatId = `temp_${Date.now()}`
+      console.log('🔄 Using temporary chat ID:', tempChatId)
       setCurrentChatId(tempChatId)
     } finally {
       setIsChatLoading(false)
@@ -397,6 +407,20 @@ export default function Chat() {
     // Check if this is the first message in a new chat session
     const isFirstMessage = messages.length === 0
     const isTemporaryChat = currentChatId && String(currentChatId).startsWith('temp_')
+    const hasValidChatId = currentChatId && !String(currentChatId).startsWith('temp_')
+    
+    // Only mark as new chat if we don't have a valid chat ID or it's temporary
+    const isNewChat = (isFirstMessage && !hasValidChatId) || isTemporaryChat
+    
+    console.log('📤 Sending message:', {
+      userMessage: userMessage.substring(0, 50) + '...',
+      currentChatId,
+      isFirstMessage,
+      isTemporaryChat,
+      hasValidChatId,
+      isNewChat,
+      messagesLength: messages.length
+    })
     
     const newMessages = [...messages, { 
       role: 'user', 
@@ -413,7 +437,8 @@ export default function Chat() {
         userMessage, 
         userId, 
         language, 
-        isFirstMessage || isTemporaryChat
+        isNewChat,
+        hasValidChatId ? currentChatId : null
       )
       
       const endTime = Date.now()
@@ -428,8 +453,14 @@ export default function Chat() {
       }]
       setMessages(finalMessages)
       
-      // If this was the first message or temporary chat, update the current chat ID with the real one from backend
-      if ((isFirstMessage || isTemporaryChat) && data.chat_id) {
+      // Always update the chat ID if we receive one from the backend
+      if (data.chat_id) {
+        console.log('📝 Updating chat ID:', {
+          previousChatId: currentChatId,
+          newChatId: data.chat_id,
+          isNewChat,
+          messageCount: finalMessages.length
+        })
         setCurrentChatId(data.chat_id)
       }
       
