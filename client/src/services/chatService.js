@@ -215,6 +215,40 @@ export const loadChatMessages = async (chatId, userId, limit = 100) => {
 };
 
 /**
+ * Sort chat sessions by datetime (most recent first)
+ * @param {Array} sessions - Chat sessions to sort
+ * @returns {Array} Sorted chat sessions
+ */
+export const sortChatSessionsByDateTime = (sessions) => {
+  if (!sessions || !Array.isArray(sessions)) {
+    return [];
+  }
+  
+  console.log('🔄 Sorting chat sessions by datetime...');
+  
+  const sorted = sessions.sort((a, b) => {
+    // Use last_activity if available, otherwise use created_at
+    const dateA = new Date(a.timestamp || a.last_activity || a.created_at)
+    const dateB = new Date(b.timestamp || b.last_activity || b.created_at)
+    
+    console.log(`   Comparing: ${a.title} (${dateA.toISOString()}) vs ${b.title} (${dateB.toISOString()})`);
+    
+    // Sort by most recent first (descending order)
+    return dateB.getTime() - dateA.getTime()
+  });
+  
+  console.log('✅ Chat sessions sorted by datetime:', sorted.map(s => ({
+    title: s.title,
+    timestamp: s.timestamp,
+    last_activity: s.last_activity,
+    created_at: s.created_at,
+    sortDate: new Date(s.timestamp || s.last_activity || s.created_at).toISOString()
+  })));
+  
+  return sorted;
+};
+
+/**
  * Format backend chat sessions for frontend use
  * @param {Array} sessions - Raw sessions from backend
  * @returns {Array} Formatted chat sessions
@@ -239,7 +273,7 @@ export const formatChatSessions = (sessions) => {
       session_id: session.session_id, // Keep session_id separate
       title: session.title || 'Untitled Chat',
       messages: [], // We'll load messages when needed
-      timestamp: session.last_activity,
+      timestamp: session.last_activity || session.created_at, // Use last_activity, fallback to created_at
       chat_type: session.chat_type || 'general',
       message_count: session.message_count || 0,
       chat_id: session.chat_id, // Store the actual chat ID for reference
@@ -247,6 +281,7 @@ export const formatChatSessions = (sessions) => {
       tags: session.tags || [],
       is_favorite: session.is_favorite || false,
       created_at: session.created_at,
+      last_activity: session.last_activity,
       chat_metadata: session.chat_metadata || {}
     };
   });
@@ -325,5 +360,6 @@ export default {
   loadChatMessages,
   formatChatSessions,
   formatChatMessages,
+  sortChatSessionsByDateTime,
   checkDatabaseStatus
 };

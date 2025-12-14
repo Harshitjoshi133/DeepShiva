@@ -493,15 +493,21 @@ body {
 }
 
 .history-item {
-  @apply flex items-center gap-1 mb-1 relative;
+  @apply mb-1 relative;
 }
 
 .history-item-button {
-  @apply flex-1 p-3 text-left bg-white rounded-lg border border-gray-200 hover:border-saffron hover:shadow-sm transition-all duration-200;
+  @apply w-full p-3 text-left bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-300;
+}
+
+.history-item-button:hover {
+  background: linear-gradient(135deg, #FFF7ED 0%, #F0FDF4 100%);
+  @apply border-orange-300;
 }
 
 .history-item-button.active {
-  @apply border-saffron bg-orange-50;
+  background: linear-gradient(135deg, #FF9933 0%, #228B22 100%);
+  @apply border-transparent text-white shadow-lg;
 }
 
 .history-item-button.loading {
@@ -517,32 +523,46 @@ body {
 }
 
 .history-item-title {
-  @apply text-sm font-medium text-gray-800 truncate flex-1 mr-2;
+  @apply flex items-center flex-1 min-w-0;
 }
 
-.history-item-time {
-  @apply text-xs text-gray-500 flex-shrink-0;
+.chat-title-text {
+  @apply text-sm font-medium text-gray-800 truncate flex-1;
 }
 
-/* Chat Menu Dropdown */
-.chat-menu-container {
-  @apply relative;
+.history-item-button.active .chat-title-text {
+  @apply text-white;
 }
 
-.chat-menu-button {
-  @apply p-1 rounded-md hover:bg-gray-100 transition-colors duration-200 text-gray-500 hover:text-gray-700;
+/* Chat Actions Container */
+.chat-actions-container {
+  @apply flex items-center gap-1 opacity-0 transition-all duration-200;
 }
 
-.chat-dropdown-menu {
-  @apply absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-24;
+/* Show actions on history item hover */
+.history-item-button:hover .chat-actions-container {
+  @apply opacity-100;
 }
 
-.dropdown-item {
-  @apply w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors duration-200 flex items-center gap-2;
+.chat-action-button {
+  @apply p-1.5 rounded-md transition-all duration-200 flex items-center justify-center;
 }
 
-.dropdown-item.delete-item {
-  @apply text-red-600 hover:bg-red-50;
+.config-button {
+  @apply text-gray-400 hover:text-blue-600 hover:bg-blue-50;
+}
+
+.delete-button {
+  @apply text-gray-400 hover:text-red-600 hover:bg-red-50;
+}
+
+/* Active chat action button styling */
+.history-item-button.active .config-button {
+  @apply text-white/70 hover:text-white hover:bg-white/20;
+}
+
+.history-item-button.active .delete-button {
+  @apply text-white/70 hover:text-white hover:bg-white/20;
 }
 
 .chat-id {
@@ -910,3 +930,298 @@ body {
   @apply p-2 bg-saffron text-white rounded-lg hover:bg-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg;
 }
 
+/* Chat Layout - User right, AI left with icon on top */
+.message-container {
+  width: 100%;
+  padding: 8px 16px;
+  clear: both;
+  position: relative;
+}
+
+/* User messages - Right side of screen */
+.message-container.user {
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+
+/* Assistant messages - Left side of screen */
+.message-container.assistant {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.message-wrapper {
+  display: flex;
+  max-width: 60%;
+  gap: 8px; /* Consistent gap between avatar and message */
+  position: relative;
+}
+
+/* User messages: Avatar on left, message on right (but container is right-aligned) */
+.message-container.user .message-wrapper {
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 4px !important; /* Smaller gap for user messages */
+  max-width: fit-content !important; /* Make user messages compact */
+}
+
+/* Assistant messages: Avatar on left, message on right */
+.message-container.assistant .message-wrapper {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.message-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.user-avatar, .assistant-avatar {
+  background: linear-gradient(135deg, #FF9933 0%, #228B22 100%);
+  color: white;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-content {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.message-bubble {
+  padding: 14px 18px;
+  border-radius: 20px;
+  word-wrap: break-word;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  position: relative;
+}
+
+/* User bubble styling */
+.user-bubble {
+  background: linear-gradient(135deg, #FF9933 0%, #228B22 100%);
+  color: white;
+  border-bottom-right-radius: 6px;
+}
+
+/* Assistant bubble styling */
+.assistant-bubble {
+  background-color: #f1f3f4;
+  color: #202124;
+  border-bottom-left-radius: 6px;
+}
+
+.message-text {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.markdown-content {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.user-bubble .markdown-content {
+  color: white;
+}
+
+.assistant-bubble .markdown-content {
+  color: #202124;
+}
+
+.markdown-content p {
+  margin: 0 0 10px 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content ul, .markdown-content ol {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.markdown-content li {
+  margin-bottom: 6px;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.user-bubble .markdown-content strong {
+  color: white;
+}
+
+.assistant-bubble .markdown-content strong {
+  color: #1a73e8;
+}
+
+.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+  @apply font-bold mb-2;
+}
+
+.user-bubble .markdown-content h1,
+.user-bubble .markdown-content h2,
+.user-bubble .markdown-content h3 {
+  @apply text-white;
+}
+
+.assistant-bubble .markdown-content h1,
+.assistant-bubble .markdown-content h2,
+.assistant-bubble .markdown-content h3 {
+  @apply gradient-text;
+}
+
+.markdown-content h1 {
+  @apply text-lg;
+}
+
+.markdown-content h2 {
+  @apply text-base;
+}
+
+.markdown-content h3 {
+  @apply text-sm;
+}
+
+.markdown-content ul {
+  @apply mb-3 pl-4 list-disc;
+}
+
+.markdown-content ol {
+  @apply mb-3 pl-4 list-decimal;
+}
+
+.markdown-content li {
+  @apply mb-1 ml-4;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 pl-4 italic mb-3;
+}
+
+.user-bubble .markdown-content blockquote {
+  @apply border-white/50 text-white/90;
+}
+
+.assistant-bubble .markdown-content blockquote {
+  @apply border-saffron text-gray-600;
+}
+
+.message-link {
+  @apply underline font-medium transition-colors duration-200;
+}
+
+.user-bubble .message-link {
+  @apply text-white hover:text-white/80;
+}
+
+.assistant-bubble .message-link {
+  @apply text-saffron hover:text-orange-600;
+}
+
+.message-code {
+  @apply px-2 py-1 rounded text-xs font-mono;
+}
+
+.user-bubble .message-code {
+  @apply bg-white/20 text-white;
+}
+
+.assistant-bubble .message-code {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.message-pre {
+  @apply p-3 rounded-lg overflow-x-auto mb-3 text-xs font-mono;
+}
+
+.user-bubble .message-pre {
+  @apply bg-white/20 text-white;
+}
+
+.assistant-bubble .message-pre {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.message-footer {
+  @apply flex items-center justify-between px-3 py-1.5 border-t text-xs;
+}
+
+.user-bubble .message-footer {
+  @apply border-white/20 text-white/70;
+}
+
+.assistant-bubble .message-footer {
+  @apply border-gray-200 text-gray-500;
+}
+
+.message-time {
+  @apply font-mono;
+}
+
+.response-time {
+  @apply font-mono px-2 py-1 rounded;
+}
+
+.user-bubble .response-time {
+  @apply bg-white/20 text-white/80;
+}
+
+.assistant-bubble .response-time {
+  @apply bg-gray-100 text-gray-600;
+}
+
+.error-indicator {
+  @apply text-red-500 font-medium;
+}
+
+/* Ensure proper list rendering in markdown */
+.markdown-content ul {
+  list-style-type: disc !important;
+  list-style-position: inside;
+}
+
+.markdown-content ol {
+  list-style-type: decimal !important;
+  list-style-position: inside;
+}
+
+.markdown-content ul ul {
+  list-style-type: circle !important;
+  margin-left: 1rem;
+}
+
+.markdown-content ol ol {
+  list-style-type: lower-alpha !important;
+  margin-left: 1rem;
+}
+
+.markdown-content li {
+  display: list-item !important;
+  margin-bottom: 0.25rem;
+}
+
+/* Ensure proper spacing for nested content */
+.markdown-content li p {
+  display: inline;
+  margin: 0;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin-top: 0.25rem;
+}

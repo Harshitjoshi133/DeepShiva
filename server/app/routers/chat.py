@@ -262,8 +262,7 @@ async def chat_query(request: ChatRequest, http_request: Request, db: AsyncSessi
             
             # Check for existing empty chat session
             existing_chat_query = select(Chat).where(
-                Chat.user_id == user.id,
-                Chat.is_active == True
+                Chat.user_id == user.id
             ).order_by(Chat.last_activity.desc())
             
             existing_result = await db.execute(existing_chat_query)
@@ -623,10 +622,13 @@ async def get_chat_sessions(
                 "message": f"User ID {target_user_id} not found."
             }
         
-        # Get chat sessions (async)
+        # Get chat sessions (async) - sort by last_activity (most recent first), then by created_at as fallback
         sessions_query = select(Chat).where(
             Chat.user_id == user.id
-        ).order_by(Chat.last_activity.desc()).limit(limit)
+        ).order_by(
+            Chat.last_activity.desc().nulls_last(),
+            Chat.created_at.desc()
+        ).limit(limit)
         
         sessions_result = await db.execute(sessions_query)
         sessions = sessions_result.scalars().all()

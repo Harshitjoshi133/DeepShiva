@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Mic, MicOff, Loader2, ArrowLeft, Globe, Menu, X, MoreHorizontal } from 'lucide-react'
+import { Send, Mic, MicOff, Loader2, ArrowLeft, Globe, Menu, X, Settings, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -211,17 +211,22 @@ export default function Chat() {
         // Convert backend format to frontend format using service
         const backendChats = chatService.formatChatSessions(data.sessions)
         
-        // Log the converted chat data
-        console.log('🔄 Converted chat sessions for frontend:', backendChats.map(chat => ({
+        // Sort chats by full datetime (most recent first) - using both date and time
+        const sortedChats = chatService.sortChatSessionsByDateTime(backendChats)
+        
+        // Log the converted and sorted chat data
+        console.log('🔄 Converted and sorted chat sessions for frontend:', sortedChats.map(chat => ({
           id: chat.id,
           chat_id: chat.chat_id,
           session_id: chat.session_id,
           title: chat.title,
-          message_count: chat.message_count
+          message_count: chat.message_count,
+          timestamp: chat.timestamp,
+          sortDate: new Date(chat.timestamp || chat.created_at).toISOString()
         })))
         
-        // Update chat history with backend data
-        setChatHistory(backendChats)
+        // Update chat history with sorted backend data
+        setChatHistory(sortedChats)
         
         console.log('✅ Successfully loaded chat sessions:', backendChats.length)
       } else {
@@ -592,47 +597,39 @@ export default function Chat() {
                           <button
                             onClick={() => loadChat(chat)}
                             disabled={loadingChatId === chat.chat_id}
-                            className={`history-item-button ${currentChatId === chat.chat_id ? 'active' : ''} ${loadingChatId === chat.chat_id ? 'loading' : ''}`}
+                            className={`history-item-button group ${currentChatId === chat.chat_id ? 'active' : ''} ${loadingChatId === chat.chat_id ? 'loading' : ''}`}
                           >
                             <div className="history-item-content">
                               <div className="history-item-title">
                                 {loadingChatId === chat.chat_id && (
                                   <Loader2 className="inline-block animate-spin mr-2 text-saffron" size={14} />
                                 )}
-                                {chat.title}
+                                <span className="chat-title-text">{chat.title}</span>
                               </div>
-                              <div className="history-item-time">
-                                {formatTime(chat.timestamp)}
-                              </div>
-                            </div>
-                          </button>
-                          <div className="chat-menu-container">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setOpenDropdownId(openDropdownId === chat.chat_id ? null : chat.chat_id)
-                              }}
-                              className="chat-menu-button"
-                              title={t('chat.options', 'Options')}
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
-                            {openDropdownId === chat.chat_id && (
-                              <div className="chat-dropdown-menu">
+                              <div className="chat-actions-container">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    // Add config functionality here later
+                                  }}
+                                  className="chat-action-button config-button"
+                                  title={t('chat.configure', 'Configure')}
+                                >
+                                  <Settings size={14} />
+                                </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     deleteChat(chat.chat_id)
-                                    setOpenDropdownId(null)
                                   }}
-                                  className="dropdown-item delete-item"
+                                  className="chat-action-button delete-button"
+                                  title={t('chat.delete', 'Delete')}
                                 >
-                                  <X size={14} />
-                                  {t('chat.delete', 'Delete')}
+                                  <Trash2 size={14} />
                                 </button>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          </button>
                         </div>
                       ))
                     ) : (
@@ -844,61 +841,62 @@ export default function Chat() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className={`message-wrapper-fullscreen ${message.role}`}
+                    className={`message-container ${message.role}`}
                   >
-                    <div className="message-content-fullscreen">
-                      <div className="message-avatar-fullscreen">
-                        {message.role === 'user' ? (
-                          <div className="user-avatar">👤</div>
-                        ) : (
-                          <div className="assistant-avatar">🕉️</div>
-                        )}
-                      </div>
-                      <div className="message-bubble-fullscreen">
-                        <div className="message-header-fullscreen">
-                          <span className="message-sender">
-                            {message.role === 'user' ? t('chat.you', 'You') : 'Deep-Shiva'}
-                          </span>
-                          <span className="message-time">
-                            {message.timestamp ? formatTime(message.timestamp) : ''}
-                          </span>
-                        </div>
-                        <div className="message-text-fullscreen">
-                          <ReactMarkdown 
-                            className="chatgpt-markdown-fullscreen"
-                            components={{
-                              a: ({ href, children }) => (
-                                <a 
-                                  href={href} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="chatgpt-link-fullscreen"
-                                >
-                                  {children}
-                                </a>
-                              ),
-                              p: ({ children }) => <p className="mb-3">{children}</p>,
-                              ul: ({ children }) => <ul className="list-disc ml-4 mb-3">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal ml-4 mb-3">{children}</ol>,
-                              li: ({ children }) => <li className="mb-1">{children}</li>,
-                              code: ({ children }) => <code className="chatgpt-code-fullscreen">{children}</code>,
-                              pre: ({ children }) => <pre className="chatgpt-pre-fullscreen">{children}</pre>
-                            }}
-                          >
-                            {message.content}
-                          </ReactMarkdown>
-                        </div>
-                        {message.responseTime && (
-                          <div className="message-footer-fullscreen">
-                            <span className="response-time">
-                              {t('chat.responseTime', 'Response time')}: {message.responseTime}
-                            </span>
-                            {message.isError && (
-                              <span className="error-indicator">⚠️ {t('chat.error', 'Error')}</span>
-                            )}
+                    <div className="message-wrapper">
+                      {message.role === 'user' ? (
+                        // User message - right aligned with avatar on right
+                        <>
+                          <div className="message-content user-message">
+                            <div className="message-bubble user-bubble">
+                              <div className="message-text">
+                                <div className="markdown-content">
+                                  {message.content}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                          <div className="message-avatar">
+                            <div className="user-avatar">👤</div>
+                          </div>
+                        </>
+                      ) : (
+                        // Assistant message - left aligned with avatar on left
+                        <>
+                          <div className="message-avatar">
+                            <div className="assistant-avatar">🕉️</div>
+                          </div>
+                          <div className="message-content assistant-message">
+                            <div className="message-bubble assistant-bubble">
+                              <div className="message-text">
+                                <ReactMarkdown 
+                                  className="markdown-content"
+                                  components={{
+                                    a: ({ href, children }) => (
+                                      <a 
+                                        href={href} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="message-link"
+                                      >
+                                        {children}
+                                      </a>
+                                    ),
+                                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc ml-4 mb-2 last:mb-0">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 last:mb-0">{children}</ol>,
+                                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                                    code: ({ children }) => <code className="message-code">{children}</code>,
+                                    pre: ({ children }) => <pre className="message-pre">{children}</pre>
+                                  }}
+                                >
+                                  {message.content}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </motion.div>
                 ))}
