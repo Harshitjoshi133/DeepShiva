@@ -29,26 +29,17 @@ class OllamaService:
         # Initialize Ollama client
         self.client = ollama.Client(host=self.host)
         
-        logger.info("Ollama service initialized", extra={
-            "host": self.host,
-            "model": self.model,
-            "timeout": self.timeout
-        })
+        logger.info(f"Ollama service initialized - Host: {self.host}, Model: {self.model}, Timeout: {self.timeout}")
     
     async def check_connection(self) -> bool:
         """Check if Ollama server is accessible"""
         try:
             # Test connection by listing models
             models = await asyncio.to_thread(self.client.list)
-            logger.info("Ollama connection successful", extra={
-                "available_models": len(models.get('models', []))
-            })
+            logger.info(f"Ollama connection successful - Available models: {len(models.get('models', []))}")
             return True
         except Exception as e:
-            logger.error("Ollama connection failed", extra={
-                "host": self.host,
-                "error": str(e)
-            })
+            logger.error(f"Ollama connection failed - Host: {self.host}, Error: {str(e)}")
             return False
     
     async def check_model_availability(self) -> bool:
@@ -58,13 +49,10 @@ class OllamaService:
             available_models = [model['name'] for model in models.get('models', [])]
             
             if self.model in available_models:
-                logger.info("Model is available", extra={"model": self.model})
+                logger.info(f"Model is available - Model: {self.model}")
                 return True
             else:
-                logger.warning("Model not found", extra={
-                    "requested_model": self.model,
-                    "available_models": available_models
-                })
+                logger.warning(f"Model not found - Requested: {self.model}, Available: {available_models}")
                 return False
         except Exception as e:
             error_tracker.log_external_api_error(e, "Ollama", "list_models")
@@ -122,13 +110,7 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
         start_time = datetime.now()
         
         try:
-            logger.info("Generating AI response", extra={
-                "user_id": user_id,
-                "message_length": len(message),
-                "has_context": bool(context),
-                "has_history": bool(conversation_history),
-                "language": language
-            })
+            logger.info(f"Generating AI response - User: {user_id}, Message Length: {len(message)}, Has Context: {bool(context)}, Has History: {bool(conversation_history)}, Language: {language}")
             
             # Also log COMPLETE user request to console
             print(f"\n{'='*80}")
@@ -185,12 +167,7 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
             
             # Log successful response
-            logger.info("AI response generated successfully", extra={
-                "user_id": user_id,
-                "response_length": len(ai_response),
-                "processing_time_ms": round(processing_time, 2),
-                "model": self.model
-            })
+            logger.info(f"AI response generated successfully - User: {user_id}, Response Length: {len(ai_response)}, Time: {round(processing_time, 2)}ms, Model: {self.model}")
             
             # Immediate console output for COMPLETE AI response
             print(f"\n{'='*80}")
@@ -230,11 +207,7 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
             
             error_tracker.log_external_api_error(e, "Ollama", "chat_completion")
             
-            logger.error("AI response generation failed", extra={
-                "user_id": user_id,
-                "error": str(e),
-                "processing_time_ms": round(processing_time, 2)
-            })
+            logger.error(f"AI response generation failed - User: {user_id}, Error: {str(e)}, Time: {round(processing_time, 2)}ms")
             
             # Generate fallback response
             fallback_response = self._get_fallback_response(message, language)
@@ -310,11 +283,11 @@ Current context: You are helping with Uttarakhand tourism and pilgrimage plannin
         model = model_name or self.model
         
         try:
-            logger.info("Pulling Ollama model", extra={"model": model})
+            logger.info(f"Pulling Ollama model - Model: {model}")
             
             await asyncio.to_thread(self.client.pull, model)
             
-            logger.info("Model pulled successfully", extra={"model": model})
+            logger.info(f"Model pulled successfully - Model: {model}")
             return True
             
         except Exception as e:

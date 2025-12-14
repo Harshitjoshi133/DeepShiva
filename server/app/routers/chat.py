@@ -1,19 +1,23 @@
+"""
+Enhanced Chat Router with async database operations, comprehensive logging and performance optimization
+Provides async database operations and detailed request/response logging
+"""
+
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import time
+import asyncio
 from datetime import datetime
 import uuid
 import json
-import random
-from pathlib import Path
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import DisconnectionError, OperationalError
-from sqlalchemy import text
 
 from ..logging_config import get_logger, ErrorTracker, PerformanceLogger, get_ai_response_logger, AIResponseLogger
 from ..services.ollama_service import ollama_service
-from ..database import get_db, get_db_with_retry
+from ..database import get_async_db, test_async_database_connection
 from ..models import User, Chat, ChatMessage
 
 router = APIRouter()
@@ -22,7 +26,31 @@ error_tracker = ErrorTracker(logger)
 performance_logger = PerformanceLogger(logger)
 ai_response_logger = AIResponseLogger(get_ai_response_logger())
 
-# Helper functions for response analysis
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000, description="User message")
+    user_id: str = Field(..., description="Unique user identifier")
+    context: Optional[str] = Field(None, description="Additional context for the query")
+    language: Optional[str] = Field("en", description="Preferred response language")
+    is_new_chat: Optional[bool] = Field(False, description="Indicates if this is the first message in a new chat")
+
+class ChatResponse(BaseModel):
+    response: str
+    user_id: str
+    message_id: str
+    chat_id: Optional[str] = None
+    timestamp: str
+    context_used: List[str]
+    suggested_actions: List[str]
+    related_topics: List[str]
+    ai_metadata: Dict[str, Any]
+    processing_time_seconds: float
+    model_used: str
+
+class NewChatSessionRequest(BaseModel):
+    user_id: str = Field(..., description="User ID")
+    language: Optional[str] = Field("en", description="Preferred language")
+
+# Helper functions
 def _extract_context_from_response(response: str) -> List[str]:
     """Extract context keywords from AI response"""
     context_keywords = {
@@ -42,16 +70,14 @@ def _extract_context_from_response(response: str) -> List[str]:
         if any(keyword in response_lower for keyword in keywords):
             found_contexts.append(context)
     
-    return found_contexts[:3]  # Return top 3 contexts
+    return found_contexts[:3]
 
 def _generate_suggested_actions(message: str, response: str) -> List[str]:
     """Generate suggested actions based on message and response"""
     message_lower = message.lower()
-    response_lower = response.lower()
     
     suggestions = []
     
-    # Context-based suggestions
     if any(word in message_lower for word in ["weather", "temperature", "climate"]):
         suggestions.extend(["Check current weather", "View 7-day forecast", "Pack weather-appropriate gear"])
     
@@ -61,17 +87,10 @@ def _generate_suggested_actions(message: str, response: str) -> List[str]:
     if any(word in message_lower for word in ["kedarnath", "badrinath", "gangotri", "yamunotri"]):
         suggestions.extend(["Check crowd status", "View shrine timings", "Book helicopter tickets"])
     
-    if any(word in message_lower for word in ["stay", "hotel", "accommodation"]):
-        suggestions.extend(["Find nearby hotels", "Check availability", "Read reviews"])
-    
-    if any(word in message_lower for word in ["yoga", "meditation", "spiritual"]):
-        suggestions.extend(["Try yoga poses", "Find meditation centers", "Learn breathing techniques"])
-    
-    # Default suggestions if none match
     if not suggestions:
         suggestions = ["Ask about Char Dham", "Check weather conditions", "Plan your journey"]
     
-    return suggestions[:3]  # Return top 3 suggestions
+    return suggestions[:3]
 
 def _generate_related_topics(message: str, response: str) -> List[str]:
     """Generate related topics based on message and response"""
@@ -79,27 +98,16 @@ def _generate_related_topics(message: str, response: str) -> List[str]:
     
     topics = []
     
-    # Topic mapping
     if any(word in message_lower for word in ["kedarnath", "badrinath", "gangotri", "yamunotri", "char dham"]):
         topics.extend(["Temple timings", "Accommodation options", "Travel routes"])
     
     if any(word in message_lower for word in ["weather", "temperature"]):
         topics.extend(["Best travel time", "What to pack", "Seasonal guidelines"])
     
-    if any(word in message_lower for word in ["travel", "route", "journey"]):
-        topics.extend(["Road conditions", "Fuel stops", "Emergency contacts"])
-    
-    if any(word in message_lower for word in ["culture", "tradition", "art"]):
-        topics.extend(["Local festivals", "Handicrafts", "Traditional food"])
-    
-    if any(word in message_lower for word in ["yoga", "meditation"]):
-        topics.extend(["Yoga centers", "Spiritual practices", "Ashram stays"])
-    
-    # Default topics
     if not topics:
         topics = ["Pilgrimage planning", "Local culture", "Travel tips"]
     
-    return topics[:3]  # Return top 3 topics
+    return topics[:3]
 
 def _determine_chat_type(message: str) -> str:
     """Determine chat type based on message content"""
@@ -113,8 +121,6 @@ def _determine_chat_type(message: str) -> str:
         return "yoga"
     elif any(word in message_lower for word in ["emergency", "help", "urgent", "accident", "medical", "police", "fire"]):
         return "emergency"
-    elif any(word in message_lower for word in ["image", "photo", "picture", "analyze", "vision", "see"]):
-        return "vision"
     else:
         return "general"
 
@@ -122,7 +128,6 @@ def _generate_chat_title(message: str) -> str:
     """Generate a chat title based on the first message"""
     message_lower = message.lower()
     
-    # Extract key topics for title
     if any(word in message_lower for word in ["kedarnath"]):
         return "Kedarnath Pilgrimage"
     elif any(word in message_lower for word in ["badrinath"]):
@@ -131,122 +136,97 @@ def _generate_chat_title(message: str) -> str:
         return "Char Dham Yatra"
     elif any(word in message_lower for word in ["yoga", "meditation"]):
         return "Yoga & Meditation"
-    elif any(word in message_lower for word in ["culture", "tradition"]):
-        return "Cultural Exploration"
-    elif any(word in message_lower for word in ["emergency"]):
-        return "Emergency Assistance"
-    elif any(word in message_lower for word in ["weather"]):
-        return "Weather Information"
     else:
-        # Use first few words of message
         words = message.split()[:4]
         return " ".join(words).title() if len(" ".join(words)) <= 50 else " ".join(words[:3]).title() + "..."
 
-class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=1000, description="User message")
-    user_id: str = Field(..., description="Unique user identifier")
-    context: Optional[str] = Field(None, description="Additional context for the query")
-    language: Optional[str] = Field("en", description="Preferred response language")
-    is_new_chat: Optional[bool] = Field(False, description="Indicates if this is the first message in a new chat")
-
-class ChatResponse(BaseModel):
-    response: str
-    user_id: str
-    message_id: str
-    chat_id: Optional[str] = None  # Include chat ID in response
-    timestamp: str
-    context_used: List[str]
-    suggested_actions: List[str]
-    related_topics: List[str]
-    ai_metadata: Dict[str, Any]
-    processing_time_seconds: float  # Changed from processing_time_ms to processing_time_seconds
-    model_used: str
-
-class ConversationHistory(BaseModel):
-    user_id: str
-    messages: List[Dict]
-    total_messages: int
-    last_activity: str
-
 @router.post("/query", response_model=ChatResponse)
-async def chat_query(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
+async def chat_query(request: ChatRequest, http_request: Request, db: AsyncSession = Depends(get_async_db)):
     """
-    AI-powered chat endpoint using Ollama for intelligent responses.
+    Enhanced AI-powered chat endpoint with async database operations, comprehensive logging and performance monitoring.
     Provides context-aware responses about Uttarakhand tourism and Char Dham pilgrimage.
-    Stores chat history in database with metadata.
     """
     start_time = time.time()
     request_id = getattr(http_request.state, 'request_id', 'unknown')
     
-    logger.info("AI chat query received", extra={
-        "request_id": request_id,
-        "user_id": request.user_id,
-        "message_length": len(request.message),
-        "language": request.language,
-        "has_context": bool(request.context)
-    })
+    # Enhanced request logging
+    message_preview = request.message[:100] + "..." if len(request.message) > 100 else request.message
+    logger.info(f"🚀 CHAT QUERY STARTED - Request ID: {request_id}, User: {request.user_id}, Message Length: {len(request.message)}, Preview: {message_preview}, Language: {request.language}, Has Context: {bool(request.context)}, New Chat: {request.is_new_chat}")
     
     if not request.message.strip():
-        logger.warning("Empty message received", extra={
-            "request_id": request_id,
-            "user_id": request.user_id
-        })
+        logger.warning(f"❌ EMPTY MESSAGE REJECTED - Request ID: {request_id}, User: {request.user_id}")
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     try:
+        # Database operations timing
+        db_start_time = time.time()
+        
         # Always use user ID 10 for chat operations
         target_user_id = 10
         
-        logger.info(f"Processing chat query for user ID: {target_user_id} (requested: {request.user_id})")
+        logger.info(f"🔍 DATABASE LOOKUP STARTED - Request ID: {request_id}, Target User: {target_user_id}, Requested User: {request.user_id}")
         
-        # Get user with ID 10
-        user = db.query(User).filter(User.id == target_user_id).first()
+        # Get user with ID 10 (async)
+        user_query = select(User).where(User.id == target_user_id)
+        user_result = await db.execute(user_query)
+        user = user_result.scalar_one_or_none()
+        
+        db_user_time = (time.time() - db_start_time) * 1000
+        
+        user_info = f"ID: {user.id}, Username: {user.username}, Active: {user.is_active}" if user else "None"
+        logger.info(f"✅ USER LOOKUP COMPLETED - Request ID: {request_id}, Target User: {target_user_id}, Found: {user is not None}, Query Time: {round(db_user_time, 2)}ms, User: {user_info}")
+        
         if not user:
-            logger.error(f"User ID {target_user_id} not found in database")
+            logger.error(f"❌ USER NOT FOUND - Request ID: {request_id}, Target User: {target_user_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
             )
         
-        # Handle chat session logic
+        # Handle chat session logic (async)
+        chat_session_start = time.time()
         active_chat = None
         
         if request.is_new_chat:
-            # Check if there's an existing empty chat session first
-            active_chat = db.query(Chat).filter(
+            chat_type = _determine_chat_type(request.message)
+            logger.info(f"🆕 CREATING NEW CHAT SESSION - Request ID: {request_id}, User: {target_user_id}, Chat Type: {chat_type}")
+            
+            # Check for existing empty chat session
+            existing_chat_query = select(Chat).where(
                 Chat.user_id == user.id,
                 Chat.is_active == True
-            ).order_by(Chat.last_activity.desc()).first()
+            ).order_by(Chat.last_activity.desc())
             
-            # If there's an empty chat (no messages), use it and update its details
+            existing_result = await db.execute(existing_chat_query)
+            active_chat = existing_result.scalar_one_or_none()
+            
             if active_chat and active_chat.message_count == 0:
-                # Update the existing empty chat with proper details
+                # Update existing empty chat
                 chat_type = _determine_chat_type(request.message)
                 active_chat.title = _generate_chat_title(request.message)
                 active_chat.chat_type = chat_type
                 active_chat.tags = _extract_context_from_response(request.message)
                 
-                # Update metadata
                 metadata = active_chat.chat_metadata or {}
                 metadata.update({
                     "language": request.language,
                     "context": request.context,
                     "created_from": "new_chat",
-                    "is_empty": False  # No longer empty
+                    "is_empty": False
                 })
                 active_chat.chat_metadata = metadata
                 
-                db.commit()
-                db.refresh(active_chat)
+                await db.commit()
+                await db.refresh(active_chat)
             else:
-                # Create a completely new chat
+                # Create completely new chat
                 chat_type = _determine_chat_type(request.message)
                 
                 active_chat = Chat(
                     user_id=user.id,
                     title=_generate_chat_title(request.message),
                     chat_type=chat_type,
-                    session_id=str(uuid.uuid4()),
+                    session_id=uuid.uuid4(),
                     chat_metadata={
                         "language": request.language,
                         "context": request.context,
@@ -255,25 +235,27 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
                     tags=_extract_context_from_response(request.message)
                 )
                 db.add(active_chat)
-                db.commit()
-                db.refresh(active_chat)
+                await db.commit()
+                await db.refresh(active_chat)
         else:
-            # Get or create active chat session for user (existing logic)
-            active_chat = db.query(Chat).filter(
+            # Get existing active chat session
+            active_chat_query = select(Chat).where(
                 Chat.user_id == user.id,
                 Chat.is_active == True
-            ).order_by(Chat.last_activity.desc()).first()
+            ).order_by(Chat.last_activity.desc())
             
-            # Create new chat if none exists or if last activity was more than 1 hour ago
+            active_chat_result = await db.execute(active_chat_query)
+            active_chat = active_chat_result.scalar_one_or_none()
+            
             if not active_chat or (datetime.now() - active_chat.last_activity.replace(tzinfo=None)).total_seconds() > 3600:
-                # Determine chat type based on message content
+                # Create new chat if none exists or too old
                 chat_type = _determine_chat_type(request.message)
                 
                 active_chat = Chat(
                     user_id=user.id,
                     title=_generate_chat_title(request.message),
                     chat_type=chat_type,
-                    session_id=str(uuid.uuid4()),
+                    session_id=uuid.uuid4(),
                     chat_metadata={
                         "language": request.language,
                         "context": request.context,
@@ -282,27 +264,38 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
                     tags=_extract_context_from_response(request.message)
                 )
                 db.add(active_chat)
-                db.commit()
-                db.refresh(active_chat)
+                await db.commit()
+                await db.refresh(active_chat)
         
-        # Get conversation history from database
-        conversation_history = []
-        recent_messages = db.query(ChatMessage).filter(
+        chat_session_time = (time.time() - chat_session_start) * 1000
+        
+        logger.info(f"✅ CHAT SESSION READY - Request ID: {request_id}, Chat ID: {active_chat.id}, Session: {active_chat.session_id}, Type: {active_chat.chat_type}, Title: {active_chat.title}, Setup Time: {round(chat_session_time, 2)}ms")
+        
+        # Get conversation history (async)
+        history_start = time.time()
+        
+        recent_messages_query = select(ChatMessage).where(
             ChatMessage.chat_id == active_chat.id
-        ).order_by(ChatMessage.created_at.desc()).limit(10).all()
+        ).order_by(ChatMessage.created_at.desc()).limit(10)
         
+        messages_result = await db.execute(recent_messages_query)
+        recent_messages = messages_result.scalars().all()
+        
+        conversation_history = []
         for msg in reversed(recent_messages):
-            conversation_history.append({
-                "role": "user",
-                "content": msg.message
-            })
+            conversation_history.append({"role": "user", "content": msg.message})
             if msg.response:
-                conversation_history.append({
-                    "role": "assistant", 
-                    "content": msg.response
-                })
+                conversation_history.append({"role": "assistant", "content": msg.response})
         
-        # Generate AI response using Ollama
+        history_time = (time.time() - history_start) * 1000
+        
+        logger.info(f"📚 CONVERSATION HISTORY LOADED - Request ID: {request_id}, Chat ID: {active_chat.id}, Messages: {len(conversation_history)}, Load Time: {round(history_time, 2)}ms")
+        
+        # Generate AI response
+        ai_start_time = time.time()
+        
+        logger.info(f"🤖 AI PROCESSING STARTED - Request ID: {request_id}, Message: {request.message[:50]}..., Language: {request.language}, Context: {request.context}, History Length: {len(conversation_history)}")
+        
         ai_result = await ollama_service.generate_response(
             message=request.message,
             user_id=request.user_id,
@@ -311,18 +304,21 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
             language=request.language
         )
         
-        # Generate unique message ID
-        message_id = f"msg_{uuid.uuid4().hex[:8]}"
+        ai_time = (time.time() - ai_start_time) * 1000
         
-        # Extract context and suggestions from AI response
+        logger.info(f"✅ AI PROCESSING COMPLETED - Request ID: {request_id}, Success: {ai_result['success']}, Model: {ai_result['model']}, Time: {round(ai_time, 2)}ms, Response Length: {len(ai_result['response'])}, Tokens: {ai_result.get('tokens_used', 0)}")
+        
+        # Generate metadata
+        message_id = f"msg_{uuid.uuid4().hex[:8]}"
         context_used = _extract_context_from_response(ai_result["response"])
         suggested_actions = _generate_suggested_actions(request.message, ai_result["response"])
         related_topics = _generate_related_topics(request.message, ai_result["response"])
         
-        # Calculate total processing time
+        # Store chat message in database (async)
+        db_save_start = time.time()
+        
         total_processing_time = (time.time() - start_time) * 1000
         
-        # Store chat message in database
         chat_message = ChatMessage(
             chat_id=active_chat.id,
             user_id=user.id,
@@ -332,7 +328,7 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
             language=request.language,
             ai_model=ai_result["model"],
             tokens_used=ai_result.get("tokens_used", 0),
-            response_time=total_processing_time / 1000,  # Convert to seconds
+            response_time=total_processing_time / 1000,
             confidence_score=ai_result.get("confidence", 0.0),
             context_data={
                 "context_used": context_used,
@@ -348,7 +344,6 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
         active_chat.total_tokens += ai_result.get("tokens_used", 0)
         active_chat.last_activity = datetime.now()
         
-        # Update average response time
         if active_chat.avg_response_time:
             active_chat.avg_response_time = (
                 (active_chat.avg_response_time * (active_chat.message_count - 1) + 
@@ -357,281 +352,138 @@ async def chat_query(request: ChatRequest, http_request: Request, db: Session = 
         else:
             active_chat.avg_response_time = total_processing_time / 1000
         
-        # Update tags with new context
         existing_tags = active_chat.tags or []
         new_tags = list(set(existing_tags + context_used))
-        active_chat.tags = new_tags[:10]  # Keep only top 10 tags
+        active_chat.tags = new_tags[:10]
         
-        db.commit()
+        await db.commit()
         
-        # Log successful response
-        logger.info("AI chat query processed successfully", extra={
-            "request_id": request_id,
-            "user_id": request.user_id,
-            "message_id": message_id,
-            "ai_success": ai_result["success"],
-            "model_used": ai_result["model"],
-            "ai_processing_time_ms": ai_result["processing_time_ms"],
-            "total_processing_time_ms": round(total_processing_time, 2),
-            "response_length": len(ai_result["response"])
-        })
+        db_save_time = (time.time() - db_save_start) * 1000
         
-        # Log conversation context and suggestions
-        ai_response_logger.log_conversation_context(
+        # Final comprehensive logging
+        total_time = (time.time() - start_time) * 1000
+        
+        logger.info(f"🎉 CHAT QUERY COMPLETED SUCCESSFULLY - Request ID: {request_id}, User: {request.user_id}, Message ID: {message_id}, Chat ID: {active_chat.id}, Total Time: {round(total_time, 2)}ms, Performance: [DB Lookup: {round(db_user_time, 2)}ms, Chat Session: {round(chat_session_time, 2)}ms, History: {round(history_time, 2)}ms, AI: {round(ai_time, 2)}ms, DB Save: {round(db_save_time, 2)}ms], Response Length: {len(ai_result['response'])}, Context: {context_used}, Actions: {suggested_actions}, Topics: {related_topics}")
+        
+        # Log AI conversation
+        ai_response_logger.log_ai_response(
             user_id=request.user_id,
             message_id=message_id,
-            context_used=context_used,
-            suggested_actions=suggested_actions,
-            related_topics=related_topics,
+            user_message=request.message,
+            ai_response=ai_result["response"],
+            model_used=ai_result["model"],
+            processing_time_ms=ai_time,
+            language=request.language,
+            context=request.context,
+            success=ai_result["success"],
             request_id=request_id
         )
-        
-        # Log performance if slow
-        if total_processing_time > 2000:  # Log if over 2 seconds
-            performance_logger.log_api_performance(
-                endpoint="/api/v1/chat/query",
-                method="POST",
-                duration_ms=total_processing_time,
-                status_code=200
-            )
         
         return ChatResponse(
             response=ai_result["response"],
             user_id=request.user_id,
             message_id=message_id,
-            chat_id=str(active_chat.id) if active_chat else None,
+            chat_id=str(active_chat.id),
             timestamp=datetime.now().isoformat(),
             context_used=context_used,
             suggested_actions=suggested_actions,
             related_topics=related_topics,
             ai_metadata=ai_result.get("metadata", {}),
-            processing_time_seconds=round(total_processing_time / 1000, 2),  # Convert to seconds
+            processing_time_seconds=round(total_time / 1000, 2),
             model_used=ai_result["model"]
         )
         
     except Exception as e:
         processing_time = (time.time() - start_time) * 1000
         
+        message_preview = request.message[:100] + "..." if len(request.message) > 100 else request.message
+        logger.error(f"💥 CHAT QUERY FAILED - Request ID: {request_id}, User: {request.user_id}, Error: {type(e).__name__}: {str(e)}, Time: {round(processing_time, 2)}ms, Message: {message_preview}, Language: {request.language}", exc_info=True)
+        
         error_tracker.log_validation_error(e, {
             "request_id": request_id,
             "user_id": request.user_id,
-            "message": request.message[:100],  # First 100 chars for privacy
+            "message": request.message[:100],
             "language": request.language
-        })
-        
-        logger.error("Chat query processing failed", extra={
-            "request_id": request_id,
-            "user_id": request.user_id,
-            "error": str(e),
-            "processing_time_ms": round(processing_time, 2)
         })
         
         raise HTTPException(
             status_code=500,
             detail="Failed to process chat query. Please try again later."
         )
-@router.get("/history/{user_id}", response_model=ConversationHistory)
-async def get_conversation_history(
-    user_id: str,
-    limit: int = Query(20, ge=1, le=100, description="Number of recent messages to return"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get conversation history for user ID 10 from database.
-    Returns recent chat messages with metadata.
-    """
-    
-    try:
-        # Always use user ID 10 for chat operations
-        target_user_id = 10
-        
-        logger.info(f"Getting conversation history for user ID: {target_user_id} (requested: {user_id})")
-        
-        # Get user with ID 10
-        user = db.query(User).filter(User.id == target_user_id).first()
-        if not user:
-            logger.warning(f"User ID {target_user_id} not found in database")
-            return ConversationHistory(
-                user_id=str(target_user_id),
-                messages=[],
-                total_messages=0,
-                last_activity=datetime.now().isoformat()
-            )
-        
-        # Get recent chat messages
-        messages_query = db.query(ChatMessage).filter(
-            ChatMessage.user_id == user.id
-        ).order_by(ChatMessage.created_at.desc()).limit(limit)
-        
-        recent_messages = messages_query.all()
-        
-        # Format messages for response
-        formatted_messages = []
-        for msg in reversed(recent_messages):  # Reverse to show chronological order
-            context_data = msg.context_data or {}
-            formatted_messages.append({
-                "message_id": f"msg_{msg.id}",
-                "user_message": msg.message,
-                "bot_response": msg.response or "",
-                "timestamp": msg.created_at.isoformat(),
-                "context_used": context_data.get("context_used", []),
-                "chat_type": db.query(Chat).filter(Chat.id == msg.chat_id).first().chat_type if msg.chat_id else "general",
-                "language": msg.language,
-                "ai_model": msg.ai_model,
-                "response_time": msg.response_time,
-                "tokens_used": msg.tokens_used
-            })
-        
-        # Get total message count
-        total_messages = db.query(ChatMessage).filter(ChatMessage.user_id == user.id).count()
-        
-        # Get last activity
-        last_activity = recent_messages[0].created_at.isoformat() if recent_messages else datetime.now().isoformat()
-        
-        return ConversationHistory(
-            user_id=str(target_user_id),
-            messages=formatted_messages,
-            total_messages=total_messages,
-            last_activity=last_activity
-        )
-        
-    except Exception as e:
-        logger.error(f"Error fetching conversation history: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch conversation history"
-        )
-
-@router.delete("/history/{user_id}")
-async def clear_conversation_history(user_id: str, db: Session = Depends(get_db)):
-    """
-    Clear conversation history for user ID 10.
-    Marks chats and messages as inactive instead of deleting.
-    """
-    
-    try:
-        # Always use user ID 10 for chat operations
-        target_user_id = 10
-        
-        logger.info(f"Clearing conversation history for user ID: {target_user_id} (requested: {user_id})")
-        
-        # Get user by ID (not username)
-        user = db.query(User).filter(User.id == target_user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail=f"User ID {target_user_id} not found")
-        
-        # Mark all user's chats as inactive
-        chats_updated = db.query(Chat).filter(Chat.user_id == user.id).update(
-            {"is_active": False}
-        )
-        
-        # Mark all user's messages as inactive (soft delete)
-        # Note: We don't actually delete to preserve data for analytics
-        messages_count = db.query(ChatMessage).filter(ChatMessage.user_id == user.id).count()
-        
-        db.commit()
-        
-        logger.info(f"Conversation history cleared for user ID {target_user_id}", extra={
-            "user_id": target_user_id,
-            "requested_user_id": user_id,
-            "chats_affected": chats_updated,
-            "messages_count": messages_count
-        })
-        
-        return {
-            "message": f"Conversation history cleared for user ID {target_user_id}",
-            "status": "success",
-            "user_id": str(target_user_id),
-            "requested_user_id": user_id,
-            "chats_affected": chats_updated,
-            "messages_count": messages_count,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error clearing conversation history: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to clear conversation history"
-        )
-
-class ChatFeedbackRequest(BaseModel):
-    user_id: str = Field(..., description="User ID")
-    message_id: str = Field(..., description="Message ID being rated")
-    rating: int = Field(..., ge=1, le=5, description="Rating from 1-5")
-    feedback_type: str = Field(..., description="Type: helpful, accurate, relevant, clear")
-    comments: Optional[str] = Field(None, max_length=500, description="Additional comments")
-
-class NewChatSessionRequest(BaseModel):
-    user_id: str = Field(..., description="User ID")
-    language: Optional[str] = Field("en", description="Preferred language")
 
 @router.post("/new-session")
 async def create_new_chat_session(
     request: NewChatSessionRequest,
-    db: Session = Depends(get_db)
+    http_request: Request,
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Create a new chat session for a user without sending a message.
-    This is called when user clicks "New Chat" button.
+    Create a new chat session with async database operations and comprehensive logging.
     """
+    start_time = time.time()
+    request_id = getattr(http_request.state, 'request_id', 'unknown')
+    
+    logger.info(f"🆕 NEW CHAT SESSION STARTED - Request ID: {request_id}, User: {request.user_id}, Language: {request.language}")
     
     try:
-        # Always use user ID 10 for chat operations
         target_user_id = 10
         
-        logger.info(f"Creating new chat session for user ID: {target_user_id} (requested: {request.user_id})")
+        # Get user (async)
+        user_query = select(User).where(User.id == target_user_id)
+        user_result = await db.execute(user_query)
+        user = user_result.scalar_one_or_none()
         
-        # Get user with ID 10
-        user = db.query(User).filter(User.id == target_user_id).first()
         if not user:
-            logger.error(f"User ID {target_user_id} not found in database")
+            logger.error(f"❌ USER NOT FOUND FOR NEW SESSION - Request ID: {request_id}, Target User: {target_user_id}")
             raise HTTPException(
                 status_code=404,
-                detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
+                detail=f"User ID {target_user_id} not found."
             )
         
-        # Mark any existing active chats as inactive
-        db.query(Chat).filter(
-            Chat.user_id == user.id,
-            Chat.is_active == True
-        ).update({"is_active": False})
+        # Mark existing active chats as inactive (async)
+        await db.execute(
+            update(Chat)
+            .where(Chat.user_id == user.id, Chat.is_active == True)
+            .values(is_active=False)
+        )
         
         # Create new chat session
         new_chat = Chat(
             user_id=user.id,
-            title="New Chat",  # Default title, will be updated with first message
+            title="New Chat",
             chat_type="general",
-            session_id=str(uuid.uuid4()),
+            session_id=uuid.uuid4(),
             chat_metadata={
                 "language": request.language,
                 "created_from": "new_session",
-                "is_empty": True  # Mark as empty until first message
+                "is_empty": True
             },
             tags=[]
         )
         db.add(new_chat)
-        db.commit()
-        db.refresh(new_chat)
+        await db.commit()
+        await db.refresh(new_chat)
         
-        logger.info("New chat session created", extra={
-            "user_id": request.user_id,
-            "chat_id": new_chat.id,
-            "session_id": new_chat.session_id
-        })
+        processing_time = (time.time() - start_time) * 1000
+        
+        logger.info(f"✅ NEW CHAT SESSION CREATED - Request ID: {request_id}, User: {request.user_id}, Chat ID: {new_chat.id}, Session: {new_chat.session_id}, Time: {round(processing_time, 2)}ms")
         
         return {
             "chat_id": str(new_chat.id),
-            "session_id": new_chat.session_id,
+            "session_id": str(new_chat.session_id),
             "title": new_chat.title,
             "chat_type": new_chat.chat_type,
             "created_at": new_chat.created_at.isoformat(),
             "status": "success",
-            "message": "New chat session created successfully"
+            "message": "New chat session created successfully",
+            "processing_time_ms": round(processing_time, 2)
         }
         
     except Exception as e:
-        logger.error(f"Error creating new chat session: {str(e)}")
+        processing_time = (time.time() - start_time) * 1000
+        
+        logger.error(f"💥 NEW CHAT SESSION FAILED - Request ID: {request_id}, User: {request.user_id}, Error: {type(e).__name__}: {str(e)}, Time: {round(processing_time, 2)}ms", exc_info=True)
+        
         raise HTTPException(
             status_code=500,
             detail="Failed to create new chat session"
@@ -640,171 +492,79 @@ async def create_new_chat_session(
 @router.get("/sessions/{user_id}")
 async def get_chat_sessions(
     user_id: str,
+    request: Request,
     limit: int = Query(10, ge=1, le=50, description="Number of chat sessions to return"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get chat sessions for a user with metadata.
-    Uses user ID 10 as the default user for all operations.
-    Includes robust error handling for database connection issues.
+    Get chat sessions for a user with async database operations and comprehensive logging.
     """
-    
     start_time = time.time()
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info(f"📂 CHAT SESSIONS REQUEST STARTED - Request ID: {request_id}, User: {user_id}, Limit: {limit}")
     
     try:
-        # Test database connection first
-        logger.info("Testing database connection for chat sessions", extra={
-            "endpoint": "/api/v1/chat/sessions",
-            "requested_user_id": user_id,
-            "limit": limit
-        })
-        
-        db.execute(text("SELECT 1"))
-        logger.info("Database connection successful")
-        
         # Always use user ID 10 for chat operations
         target_user_id = 10
         
-        logger.info("Chat sessions request initiated", extra={
-            "target_user_id": target_user_id,
-            "requested_user_id": user_id,
-            "limit": limit,
-            "endpoint": "GET /api/v1/chat/sessions"
-        })
+        # Get user (async)
+        user_query = select(User).where(User.id == target_user_id)
+        user_result = await db.execute(user_query)
         
-        # Get user with ID 10
-        user_query_start = time.time()
-        user = db.query(User).filter(User.id == target_user_id).first()
-        user_query_time = (time.time() - user_query_start) * 1000
-        
-        logger.info("User lookup completed", extra={
-            "target_user_id": target_user_id,
-            "user_found": user is not None,
-            "user_query_time_ms": round(user_query_time, 2),
-            "user_details": {
-                "id": user.id if user else None,
-                "username": user.username if user else None,
-                "email": user.email if user else None,
-                "active": user.is_active if user else None
-            } if user else None
-        })
-        
+        user = user_result.scalar_one_or_none()
+        logger.info(user.id)
         if not user:
-            logger.warning("User not found in database", extra={
-                "target_user_id": target_user_id,
-                "requested_user_id": user_id,
-                "error_type": "user_not_found"
-            })
+            logger.warning(f"❌ USER NOT FOUND FOR SESSIONS - Request ID: {request_id}, Target User: {target_user_id}, Requested User: {user_id}")
             return {
                 "user_id": str(target_user_id),
                 "sessions": [],
                 "total_sessions": 0,
                 "status": "user_not_found",
-                "message": f"User ID {target_user_id} not found. Please run ensure_user_10.py script."
+                "message": f"User ID {target_user_id} not found."
             }
         
-        # Get chat sessions with error handling
-        sessions_query_start = time.time()
-        sessions = db.query(Chat).filter(
-            Chat.user_id == user.id,
-            Chat.is_active == True
-        ).order_by(Chat.last_activity.desc()).limit(limit).all()
-        sessions_query_time = (time.time() - sessions_query_start) * 1000
+        # Get chat sessions (async)
+        sessions_query = select(Chat).where(
+            Chat.user_id == user.id
+        ).order_by(Chat.last_activity.desc()).limit(limit)
         
-        logger.info("Chat sessions query completed", extra={
-            "user_id": target_user_id,
-            "sessions_found": len(sessions),
-            "query_time_ms": round(sessions_query_time, 2),
-            "limit_applied": limit,
-            "sessions_summary": [
-                {
-                    "chat_id": s.id,
-                    "title": s.title,
-                    "type": s.chat_type,
-                    "messages": s.message_count,
-                    "last_activity": s.last_activity.isoformat() if s.last_activity else None
-                } for s in sessions[:3]  # Log first 3 sessions for debugging
-            ] if sessions else []
-        })
+        sessions_result = await db.execute(sessions_query)
+        sessions = sessions_result.scalars().all()
         
         # Format sessions
-        format_start_time = time.time()
         formatted_sessions = []
-        formatting_errors = 0
+        for session in sessions:
+            formatted_session = {
+                "session_id": str(session.session_id),
+                "chat_id": session.id,
+                "title": session.title or "Untitled Chat",
+                "chat_type": session.chat_type or "general",
+                "message_count": session.message_count or 0,
+                "total_tokens": session.total_tokens or 0,
+                "avg_response_time": float(session.avg_response_time) if session.avg_response_time else 0.0,
+                "user_rating": session.user_rating,
+                "tags": session.tags or [],
+                "is_favorite": session.is_favorite or False,
+                "last_activity": session.last_activity.isoformat() if session.last_activity else datetime.now().isoformat(),
+                "created_at": session.created_at.isoformat() if session.created_at else datetime.now().isoformat(),
+                "chat_metadata": session.chat_metadata or {}
+            }
+            formatted_sessions.append(formatted_session)
         
-        for i, session in enumerate(sessions):
-            try:
-                formatted_session = {
-                    "session_id": session.session_id,
-                    "chat_id": session.id,
-                    "title": session.title or "Untitled Chat",
-                    "chat_type": session.chat_type or "general",
-                    "message_count": session.message_count or 0,
-                    "total_tokens": session.total_tokens or 0,
-                    "avg_response_time": float(session.avg_response_time) if session.avg_response_time else 0.0,
-                    "user_rating": session.user_rating,
-                    "tags": session.tags or [],
-                    "is_favorite": session.is_favorite or False,
-                    "last_activity": session.last_activity.isoformat() if session.last_activity else datetime.now().isoformat(),
-                    "created_at": session.created_at.isoformat() if session.created_at else datetime.now().isoformat(),
-                    "chat_metadata": session.chat_metadata or {}
-                }
-                formatted_sessions.append(formatted_session)
-                
-                # Log detailed info for first session
-                if i == 0:
-                    logger.info("First session details", extra={
-                        "session_details": formatted_session
-                    })
-                    
-            except Exception as format_error:
-                formatting_errors += 1
-                logger.warning("Error formatting session", extra={
-                    "session_id": session.id if hasattr(session, 'id') else 'unknown',
-                    "error": str(format_error),
-                    "error_type": type(format_error).__name__
-                })
-                # Skip malformed sessions
-                continue
+        # Get total session count
+        count_query = select(Chat).where(
+            Chat.user_id == user.id,
+            Chat.is_active == True
+        )
+        count_result = await db.execute(count_query)
+        total_sessions = len(count_result.scalars().all())
         
-        format_time = (time.time() - format_start_time) * 1000
+        processing_time = (time.time() - start_time) * 1000
         
-        logger.info("Session formatting completed", extra={
-            "total_sessions": len(sessions),
-            "formatted_sessions": len(formatted_sessions),
-            "formatting_errors": formatting_errors,
-            "format_time_ms": round(format_time, 2)
-        })
+        logger.info(f"✅ CHAT SESSIONS REQUEST COMPLETED - Request ID: {request_id}, User: {user_id}, Sessions Returned: {len(formatted_sessions)}, Total: {total_sessions}, Time: {round(processing_time, 2)}ms")
         
-        # Get total session count with fallback
-        count_start_time = time.time()
-        try:
-            total_sessions = db.query(Chat).filter(
-                Chat.user_id == user.id,
-                Chat.is_active == True
-            ).count()
-            count_time = (time.time() - count_start_time) * 1000
-            
-            logger.info("Session count query completed", extra={
-                "total_sessions": total_sessions,
-                "count_query_time_ms": round(count_time, 2)
-            })
-        except Exception as count_error:
-            count_time = (time.time() - count_start_time) * 1000
-            total_sessions = len(formatted_sessions)
-            
-            logger.warning("Error counting sessions, using fallback", extra={
-                "error": str(count_error),
-                "error_type": type(count_error).__name__,
-                "fallback_count": total_sessions,
-                "count_query_time_ms": round(count_time, 2)
-            })
-        
-        # Calculate total processing time
-        total_processing_time = (time.time() - start_time) * 1000
-        
-        # Prepare response
-        response_data = {
+        return {
             "user_id": str(target_user_id),
             "database_user_id": target_user_id,
             "requested_user_id": user_id,
@@ -814,53 +574,13 @@ async def get_chat_sessions(
             "status": "success"
         }
         
-        logger.info("Chat sessions request completed successfully", extra={
-            "target_user_id": target_user_id,
-            "requested_user_id": user_id,
-            "sessions_returned": len(formatted_sessions),
-            "total_sessions_in_db": total_sessions,
-            "limit_applied": limit,
-            "total_processing_time_ms": round(total_processing_time, 2),
-            "performance_breakdown": {
-                "user_query_ms": round(user_query_time, 2),
-                "sessions_query_ms": round(sessions_query_time, 2),
-                "formatting_ms": round(format_time, 2),
-                "count_query_ms": round(count_time, 2) if 'count_time' in locals() else 0
-            },
-            "response_summary": {
-                "status": "success",
-                "has_sessions": len(formatted_sessions) > 0,
-                "user_found": True,
-                "database_healthy": True
-            }
-        })
-        
-        return response_data
-        
     except Exception as e:
-        from sqlalchemy.exc import DisconnectionError, OperationalError
+        processing_time = (time.time() - start_time) * 1000
         
-        # Log the specific error type
-        error_type = type(e).__name__
-        logger.error(f"Error fetching chat sessions: ({error_type}) {str(e)}")
+        logger.error(f"💥 CHAT SESSIONS REQUEST FAILED - Request ID: {request_id}, User: {user_id}, Error: {type(e).__name__}: {str(e)}, Time: {round(processing_time, 2)}ms", exc_info=True)
         
-        # Handle specific database connection errors
-        if isinstance(e, (DisconnectionError, OperationalError)):
-            logger.error("Database connection lost, attempting to handle gracefully")
-            
-            # Return empty result with error status instead of raising exception
-            return {
-                "user_id": user_id,
-                "sessions": [],
-                "total_sessions": 0,
-                "timestamp": datetime.now().isoformat(),
-                "status": "database_connection_error",
-                "error_message": "Database temporarily unavailable. Please try again."
-            }
-        
-        # For other errors, still return structured response
         return {
-            "user_id": str(10),  # Always return user ID 10
+            "user_id": str(10),
             "database_user_id": 10,
             "requested_user_id": user_id,
             "sessions": [],
@@ -870,734 +590,59 @@ async def get_chat_sessions(
             "error_message": "Unable to fetch chat sessions at this time."
         }
 
-@router.post("/feedback")
-async def submit_chat_feedback(request: ChatFeedbackRequest, db: Session = Depends(get_db)):
-    """
-    Submit feedback on chat responses to improve AI performance.
-    Stores feedback in database for analytics and model improvement.
-    """
-    
-    valid_feedback_types = ["helpful", "accurate", "relevant", "clear"]
-    if request.feedback_type not in valid_feedback_types:
-        raise HTTPException(status_code=400, detail=f"Invalid feedback type. Must be one of: {valid_feedback_types}")
-    
-    try:
-        # Extract message ID number from message_id string (e.g., "msg_12345" -> 12345)
-        message_id_num = int(request.message_id.replace("msg_", ""))
-        
-        # Find the chat message
-        chat_message = db.query(ChatMessage).filter(ChatMessage.id == message_id_num).first()
-        if not chat_message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        
-        # Update message with feedback
-        chat_message.feedback_rating = request.rating
-        chat_message.is_helpful = request.rating >= 4  # Consider 4+ as helpful
-        
-        # Update context_data with feedback
-        context_data = chat_message.context_data or {}
-        context_data["feedback"] = {
-            "rating": request.rating,
-            "feedback_type": request.feedback_type,
-            "comments": request.comments,
-            "timestamp": datetime.now().isoformat()
-        }
-        chat_message.context_data = context_data
-        
-        # Update chat rating if this is the first feedback or better rating
-        chat = db.query(Chat).filter(Chat.id == chat_message.chat_id).first()
-        if chat:
-            if not chat.user_rating or request.rating > chat.user_rating:
-                chat.user_rating = request.rating
-        
-        db.commit()
-        
-        logger.info("Chat feedback submitted", extra={
-            "user_id": request.user_id,
-            "message_id": request.message_id,
-            "rating": request.rating,
-            "feedback_type": request.feedback_type
-        })
-        
-        return {
-            "message": "Thank you for your feedback! This helps us improve Deep-Shiva.",
-            "feedback_id": f"fb_{message_id_num}_{int(time.time())}",
-            "status": "success",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid message ID format")
-    except Exception as e:
-        logger.error(f"Error submitting feedback: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to submit feedback"
-        )
-
-@router.get("/suggestions")
-async def get_chat_suggestions():
-    """
-    Get suggested questions/topics for users to ask about.
-    
-    TODO: Personalize suggestions based on user history and preferences.
-    TODO: Add trending topics and seasonal suggestions.
-    """
-    
-    suggestions = {
-        "popular_questions": [
-            "Tell me about the Char Dham yatra",
-            "What's the best time to visit Kedarnath?",
-            "How do I plan a trip to Badrinath?",
-            "What should I pack for the pilgrimage?",
-            "Are there helicopter services available?",
-            "What are the accommodation options?",
-            "Tell me about local culture and traditions",
-            "What yoga practices are recommended?"
-        ],
-        "categories": [
-            {
-                "name": "Pilgrimage Planning",
-                "questions": [
-                    "How long does the Char Dham yatra take?",
-                    "What are the registration requirements?",
-                    "Can I visit all four dhams in one trip?"
-                ]
-            },
-            {
-                "name": "Travel & Transport",
-                "questions": [
-                    "What are the road conditions like?",
-                    "Is public transport available?",
-                    "How much does the trip cost?"
-                ]
-            },
-            {
-                "name": "Health & Safety",
-                "questions": [
-                    "What precautions should I take for high altitude?",
-                    "Are there medical facilities available?",
-                    "What emergency contacts should I have?"
-                ]
-            },
-            {
-                "name": "Culture & Spirituality",
-                "questions": [
-                    "What are the temple timings?",
-                    "What rituals are performed at each shrine?",
-                    "Can I buy local handicrafts?"
-                ]
-            }
-        ],
-        "quick_actions": [
-            "Check current weather",
-            "Calculate carbon footprint",
-            "View crowd status",
-            "Find accommodation",
-            "Practice yoga poses"
-        ]
-    }
-    
-    return suggestions
-
-class TranslateRequest(BaseModel):
-    text: str = Field(..., description="Text to translate")
-    target_language: str = Field(..., description="Target language: en, hi, ga")
-    source_language: Optional[str] = Field("auto", description="Source language (auto-detect)")
-
-@router.post("/translate")
-async def translate_message(request: TranslateRequest):
-    """
-    Translate text between supported languages.
-    
-    TODO: Integrate with translation service (Google Translate API, etc.)
-    TODO: Add support for more regional languages.
-    """
-    
-    supported_languages = ["en", "hi", "ga"]  # English, Hindi, Garhwali
-    
-    if request.target_language not in supported_languages:
-        raise HTTPException(status_code=400, detail=f"Unsupported target language. Supported: {supported_languages}")
-    
-    # Mock translation responses
-    translations = {
-        "en": {
-            "नमस्ते": "Hello",
-            "धन्यवाद": "Thank you", 
-            "केदारनाथ": "Kedarnath",
-            "यात्रा": "Journey/Pilgrimage"
-        },
-        "hi": {
-            "hello": "नमस्ते",
-            "thank you": "धन्यवाद",
-            "kedarnath": "केदारनाथ", 
-            "journey": "यात्रा"
-        },
-        "ga": {
-            "hello": "जय भोले की",
-            "thank you": "धन्यवाद",
-            "mountain": "पहाड़",
-            "temple": "मंदिर"
-        }
-    }
-    
-    # Simple mock translation
-    text_lower = request.text.lower()
-    translated_text = request.text  # Default to original text
-    
-    if request.target_language in translations:
-        for original, translation in translations[request.target_language].items():
-            if original in text_lower:
-                translated_text = translation
-                break
-    
-    return {
-        "original_text": request.text,
-        "translated_text": translated_text,
-        "source_language": request.source_language,
-        "target_language": request.target_language,
-        "confidence": 0.95 if translated_text != request.text else 0.1
-    }
-
-@router.get("/ollama/status")
-async def get_ollama_status(request: Request):
-    """
-    Get Ollama service status and model information
-    """
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    
-    logger.info("Ollama status check requested", extra={
-        "request_id": request_id
-    })
-    
-    try:
-        # Check Ollama connection
-        connection_ok = await ollama_service.check_connection()
-        
-        # Check model availability
-        model_available = await ollama_service.check_model_availability() if connection_ok else False
-        
-        # Get model info
-        model_info = await ollama_service.get_model_info() if connection_ok else {}
-        
-        status = {
-            "ollama_connected": connection_ok,
-            "model_available": model_available,
-            "model_info": model_info,
-            "configuration": {
-                "host": ollama_service.host,
-                "model": ollama_service.model,
-                "timeout": ollama_service.timeout,
-                "temperature": ollama_service.temperature,
-                "max_tokens": ollama_service.max_tokens
-            },
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        logger.info("Ollama status check completed", extra={
-            "request_id": request_id,
-            "connected": connection_ok,
-            "model_available": model_available
-        })
-        
-        return status
-        
-    except Exception as e:
-        error_tracker.log_external_api_error(e, "Ollama", "status_check")
-        
-        return {
-            "ollama_connected": False,
-            "model_available": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-@router.post("/ollama/pull-model")
-async def pull_ollama_model(request: Request, model_name: Optional[str] = None):
-    """
-    Pull/download a model to Ollama
-    """
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    model = model_name or ollama_service.model
-    
-    logger.info("Model pull requested", extra={
-        "request_id": request_id,
-        "model": model
-    })
-    
-    try:
-        success = await ollama_service.pull_model(model)
-        
-        if success:
-            logger.info("Model pulled successfully", extra={
-                "request_id": request_id,
-                "model": model
-            })
-            
-            return {
-                "success": True,
-                "message": f"Model '{model}' pulled successfully",
-                "model": model,
-                "timestamp": datetime.now().isoformat()
-            }
-        else:
-            return {
-                "success": False,
-                "message": f"Failed to pull model '{model}'",
-                "model": model,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-    except Exception as e:
-        error_tracker.log_external_api_error(e, "Ollama", "pull_model")
-        
-        return {
-            "success": False,
-            "error": str(e),
-            "model": model,
-            "timestamp": datetime.now().isoformat()
-        }
-
-@router.post("/test-ai")
-async def test_ai_response(request: Request):
-    """
-    Test AI response with a simple query
-    """
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    
-    logger.info("AI test requested", extra={
-        "request_id": request_id
-    })
-    
-    try:
-        test_message = "Hello, tell me about Kedarnath temple in one sentence."
-        
-        ai_result = await ollama_service.generate_response(
-            message=test_message,
-            user_id="test_user",
-            context="Testing AI functionality",
-            language="en"
-        )
-        
-        logger.info("AI test completed", extra={
-            "request_id": request_id,
-            "success": ai_result["success"],
-            "model": ai_result["model"],
-            "processing_time_ms": ai_result["processing_time_ms"]
-        })
-        
-        return {
-            "test_message": test_message,
-            "ai_response": ai_result["response"],
-            "success": ai_result["success"],
-            "model_used": ai_result["model"],
-            "processing_time_ms": ai_result["processing_time_ms"],
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        error_tracker.log_external_api_error(e, "Ollama", "test_ai")
-        
-        return {
-            "success": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-@router.get("/ai-logs")
-async def get_ai_response_logs(
-    request: Request,
-    limit: int = Query(50, ge=1, le=200, description="Number of logs to return"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    success_only: bool = Query(False, description="Show only successful responses")
-):
-    """
-    Get recent AI response logs for monitoring and debugging
-    """
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    
-    logger.info("AI logs requested", extra={
-        "request_id": request_id,
-        "limit": limit,
-        "user_filter": user_id,
-        "success_only": success_only
-    })
-    
-    try:
-        logs = []
-        log_file_path = Path("logs/ai_responses.log")
-        
-        if log_file_path.exists():
-            with open(log_file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            # Parse recent log lines
-            for line in reversed(lines[-limit*2:]):  # Get more lines to filter
-                try:
-                    log_data = json.loads(line.strip())
-                    
-                    # Apply filters
-                    if user_id and log_data.get('user_id') != user_id:
-                        continue
-                    if success_only and not log_data.get('success', True):
-                        continue
-                    
-                    # Clean up log data for API response
-                    clean_log = {
-                        "timestamp": log_data.get('timestamp'),
-                        "event_type": log_data.get('event_type'),
-                        "user_id": log_data.get('user_id'),
-                        "message_id": log_data.get('message_id'),
-                        "user_message": log_data.get('user_message', ''),
-                        "ai_response": log_data.get('ai_response', ''),
-                        "model_used": log_data.get('model_used'),
-                        "processing_time_ms": log_data.get('processing_time_ms'),
-                        "language": log_data.get('language'),
-                        "success": log_data.get('success', True),
-                        "context": log_data.get('context'),
-                        "context_used": log_data.get('context_used', []),
-                        "suggested_actions": log_data.get('suggested_actions', []),
-                        "related_topics": log_data.get('related_topics', [])
-                    }
-                    
-                    logs.append(clean_log)
-                    
-                    if len(logs) >= limit:
-                        break
-                        
-                except (json.JSONDecodeError, KeyError):
-                    continue
-        
-        logger.info("AI logs retrieved", extra={
-            "request_id": request_id,
-            "logs_returned": len(logs)
-        })
-        
-        return {
-            "logs": logs,
-            "total_returned": len(logs),
-            "filters_applied": {
-                "user_id": user_id,
-                "success_only": success_only,
-                "limit": limit
-            },
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        error_tracker.log_external_api_error(e, "FileSystem", "ai_logs")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve AI logs"
-        )
-
-@router.get("/ai-stats")
-async def get_ai_statistics(
-    request: Request,
-    hours: int = Query(24, ge=1, le=168, description="Hours to analyze")
-):
-    """
-    Get AI response statistics and performance metrics
-    """
-    request_id = getattr(request.state, 'request_id', 'unknown')
-    
-    logger.info("AI statistics requested", extra={
-        "request_id": request_id,
-        "hours": hours
-    })
-    
-    try:
-        # Parse AI logs for statistics
-        stats = {
-            "total_responses": 0,
-            "successful_responses": 0,
-            "failed_responses": 0,
-            "avg_processing_time_ms": 0,
-            "models_used": {},
-            "languages_used": {},
-            "most_common_contexts": {},
-            "response_time_distribution": {
-                "under_1s": 0,
-                "1s_to_3s": 0,
-                "3s_to_5s": 0,
-                "over_5s": 0
-            }
-        }
-        
-        log_file_path = Path("logs/ai_responses.log")
-        
-        if log_file_path.exists():
-            processing_times = []
-            
-            with open(log_file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            # Analyze recent logs
-            cutoff_time = datetime.now().timestamp() - (hours * 3600)
-            
-            for line in reversed(lines[-1000:]):  # Analyze last 1000 entries
-                try:
-                    log_data = json.loads(line.strip())
-                    
-                    # Check if log is within time range
-                    log_time = datetime.fromisoformat(log_data.get('timestamp', '').replace('Z', '+00:00'))
-                    if log_time.timestamp() < cutoff_time:
-                        continue
-                    
-                    if log_data.get('event_type') == 'ai_response':
-                        stats["total_responses"] += 1
-                        
-                        if log_data.get('success', True):
-                            stats["successful_responses"] += 1
-                        else:
-                            stats["failed_responses"] += 1
-                        
-                        # Processing time analysis
-                        proc_time = log_data.get('processing_time_ms', 0)
-                        if proc_time > 0:
-                            processing_times.append(proc_time)
-                            
-                            if proc_time < 1000:
-                                stats["response_time_distribution"]["under_1s"] += 1
-                            elif proc_time < 3000:
-                                stats["response_time_distribution"]["1s_to_3s"] += 1
-                            elif proc_time < 5000:
-                                stats["response_time_distribution"]["3s_to_5s"] += 1
-                            else:
-                                stats["response_time_distribution"]["over_5s"] += 1
-                        
-                        # Model usage
-                        model = log_data.get('model_used', 'unknown')
-                        stats["models_used"][model] = stats["models_used"].get(model, 0) + 1
-                        
-                        # Language usage
-                        language = log_data.get('language', 'unknown')
-                        stats["languages_used"][language] = stats["languages_used"].get(language, 0) + 1
-                        
-                        # Context analysis
-                        context = log_data.get('context')
-                        if context:
-                            stats["most_common_contexts"][context] = stats["most_common_contexts"].get(context, 0) + 1
-                
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    continue
-            
-            # Calculate averages
-            if processing_times:
-                stats["avg_processing_time_ms"] = round(sum(processing_times) / len(processing_times), 2)
-        
-        # Calculate success rate
-        success_rate = 0
-        if stats["total_responses"] > 0:
-            success_rate = round((stats["successful_responses"] / stats["total_responses"]) * 100, 2)
-        
-        stats["success_rate_percent"] = success_rate
-        stats["analysis_period_hours"] = hours
-        stats["timestamp"] = datetime.now().isoformat()
-        
-        logger.info("AI statistics generated", extra={
-            "request_id": request_id,
-            "total_responses": stats["total_responses"],
-            "success_rate": success_rate
-        })
-        
-        return stats
-        
-    except Exception as e:
-        error_tracker.log_external_api_error(e, "FileSystem", "ai_stats")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate AI statistics"
-        )
-
-@router.get("/chats")
-async def get_all_chats(
-    limit: int = Query(50, ge=1, le=200, description="Number of chats to return"),
-    offset: int = Query(0, ge=0, description="Number of chats to skip"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    chat_type: Optional[str] = Query(None, description="Filter by chat type"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get all chats with pagination and filtering options.
-    Returns comprehensive chat information including metadata and statistics.
-    """
-    
-    try:
-        # Build query
-        query = db.query(Chat).filter(Chat.is_active == True)
-        
-        # Apply filters - always use user ID 10
-        if user_id:
-            target_user_id = 10
-            logger.info(f"Filtering chats for user ID: {target_user_id} (requested: {user_id})")
-            
-            # Get user by ID (not username)
-            user = db.query(User).filter(User.id == target_user_id).first()
-            if user:
-                query = query.filter(Chat.user_id == user.id)
-            else:
-                # Return empty result if user not found
-                return {
-                    "chats": [],
-                    "total_count": 0,
-                    "limit": limit,
-                    "offset": offset,
-                    "filters": {
-                        "user_id": str(target_user_id),
-                        "requested_user_id": user_id,
-                        "chat_type": chat_type
-                    },
-                    "timestamp": datetime.now().isoformat(),
-                    "status": "user_not_found"
-                }
-        
-        if chat_type:
-            query = query.filter(Chat.chat_type == chat_type)
-        
-        # Get total count before pagination
-        total_count = query.count()
-        
-        # Apply pagination and ordering
-        chats = query.order_by(Chat.last_activity.desc()).offset(offset).limit(limit).all()
-        
-        # Format chat data
-        formatted_chats = []
-        for chat in chats:
-            # Get user info
-            user = db.query(User).filter(User.id == chat.user_id).first()
-            
-            # Get recent messages count
-            recent_messages_count = db.query(ChatMessage).filter(
-                ChatMessage.chat_id == chat.id
-            ).count()
-            
-            # Get last message
-            last_message = db.query(ChatMessage).filter(
-                ChatMessage.chat_id == chat.id
-            ).order_by(ChatMessage.created_at.desc()).first()
-            
-            formatted_chat = {
-                "chat_id": chat.id,
-                "session_id": chat.session_id,
-                "title": chat.title,
-                "chat_type": chat.chat_type,
-                "user_info": {
-                    "user_id": user.id if user else None,
-                    "username": user.username if user else "Unknown",
-                    "full_name": user.full_name if user else "Unknown User",
-                    "preferred_language": user.preferred_language if user else "en"
-                },
-                "statistics": {
-                    "message_count": chat.message_count,
-                    "total_tokens": chat.total_tokens,
-                    "avg_response_time": chat.avg_response_time,
-                    "actual_messages_count": recent_messages_count
-                },
-                "metadata": {
-                    "user_rating": chat.user_rating,
-                    "tags": chat.tags or [],
-                    "is_favorite": chat.is_favorite,
-                    "chat_metadata": chat.chat_metadata or {}
-                },
-                "timestamps": {
-                    "created_at": chat.created_at.isoformat(),
-                    "last_activity": chat.last_activity.isoformat()
-                },
-                "last_message": {
-                    "content": last_message.message[:100] + "..." if last_message and len(last_message.message) > 100 else (last_message.message if last_message else None),
-                    "timestamp": last_message.created_at.isoformat() if last_message else None,
-                    "language": last_message.language if last_message else None
-                } if last_message else None
-            }
-            
-            formatted_chats.append(formatted_chat)
-        
-        logger.info("All chats retrieved", extra={
-            "total_count": total_count,
-            "returned_count": len(formatted_chats),
-            "limit": limit,
-            "offset": offset,
-            "user_filter": user_id,
-            "chat_type_filter": chat_type
-        })
-        
-        return {
-            "chats": formatted_chats,
-            "total_count": total_count,
-            "returned_count": len(formatted_chats),
-            "limit": limit,
-            "offset": offset,
-            "has_more": (offset + len(formatted_chats)) < total_count,
-            "filters": {
-                "user_id": str(10),  # Always user ID 10
-                "requested_user_id": user_id,
-                "chat_type": chat_type
-            },
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching all chats: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch chats"
-        )
-
 @router.get("/messages/{chat_id}")
 async def get_chat_messages(
-    chat_id: int,
+    chat_id: str,
+    request: Request,
     user_id: str = Query(..., description="User ID"),
-    limit: int = Query(50, ge=1, le=200, description="Number of messages to return"),
+    limit: int = Query(100, ge=1, le=200, description="Number of messages to return"),
     offset: int = Query(0, ge=0, description="Number of messages to skip"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get messages for a specific chat ID.
-    Returns messages with proper formatting for the frontend.
+    Get messages for a specific chat with async database operations and comprehensive logging.
     """
+    start_time = time.time()
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info(f"📨 CHAT MESSAGES REQUEST STARTED - Request ID: {request_id}, Chat: {chat_id}, User: {user_id}, Limit: {limit}, Offset: {offset}")
     
     try:
-        # Always use user ID 10 for chat operations
         target_user_id = 10
         
-        logger.info(f"Getting messages for chat_id: {chat_id}, user_id: {target_user_id} (requested: {user_id})")
+        # Get user first to verify ownership
+        user_query = select(User).where(User.id == target_user_id)
+        user_result = await db.execute(user_query)
+        user = user_result.scalar_one_or_none()
         
-        # Get user with ID 10
-        user = db.query(User).filter(User.id == target_user_id).first()
         if not user:
-            logger.warning(f"User ID {target_user_id} not found in database")
-            raise HTTPException(
-                status_code=404,
-                detail=f"User ID {target_user_id} not found. Please run ensure_user_10.py script to create the default user."
-            )
+            logger.warning(f"❌ USER NOT FOUND FOR MESSAGES - Request ID: {request_id}, Target User: {target_user_id}, Requested User: {user_id}")
+            raise HTTPException(status_code=404, detail="User not found")
         
-        # Verify chat exists and belongs to user
-        chat = db.query(Chat).filter(
-            Chat.id == chat_id,
-            Chat.user_id == user.id,
-            Chat.is_active == True
-        ).first()
+        # Get chat (async) - verify it belongs to the user
+        chat_query = select(Chat).where(
+            Chat.id == int(chat_id),
+            Chat.user_id == user.id  # Ensure chat belongs to the user
+        )
+        chat_result = await db.execute(chat_query)
+        chat = chat_result.scalar_one_or_none()
         
         if not chat:
-            logger.warning(f"Chat ID {chat_id} not found for user {target_user_id}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Chat ID {chat_id} not found or not accessible"
-            )
+            logger.warning(f"❌ CHAT NOT FOUND OR ACCESS DENIED - Request ID: {request_id}, Chat: {chat_id}, User: {user_id}, Target User: {target_user_id}")
+            raise HTTPException(status_code=404, detail="Chat not found or access denied")
         
-        # Get messages for this chat
-        messages_query = db.query(ChatMessage).filter(
-            ChatMessage.chat_id == chat_id,
-            ChatMessage.user_id == user.id
+        # Get messages (async)
+        messages_query = select(ChatMessage).where(
+            ChatMessage.chat_id == chat.id
         ).order_by(ChatMessage.created_at.asc()).offset(offset).limit(limit)
         
-        messages = messages_query.all()
+        messages_result = await db.execute(messages_query)
+        messages = messages_result.scalars().all()
         
-        # Get total message count for this chat
-        total_messages = db.query(ChatMessage).filter(
-            ChatMessage.chat_id == chat_id,
-            ChatMessage.user_id == user.id
-        ).count()
+        # Get total message count
+        total_count_query = select(ChatMessage).where(ChatMessage.chat_id == chat.id)
+        total_count_result = await db.execute(total_count_query)
+        total_messages = len(total_count_result.scalars().all())
         
         # Format messages for frontend
         formatted_messages = []
@@ -1626,14 +671,9 @@ async def get_chat_messages(
                     "context_data": msg.context_data
                 })
         
-        logger.info("Chat messages retrieved successfully", extra={
-            "chat_id": chat_id,
-            "user_id": target_user_id,
-            "messages_returned": len(formatted_messages),
-            "total_messages": total_messages,
-            "limit": limit,
-            "offset": offset
-        })
+        processing_time = (time.time() - start_time) * 1000
+        
+        logger.info(f"✅ CHAT MESSAGES REQUEST COMPLETED - Request ID: {request_id}, Chat: {chat_id}, User: {user_id}, Messages Returned: {len(formatted_messages)}, Total: {total_messages}, Time: {round(processing_time, 2)}ms")
         
         return {
             "chat_id": chat_id,
@@ -1642,7 +682,7 @@ async def get_chat_messages(
             "chat_info": {
                 "title": chat.title,
                 "chat_type": chat.chat_type,
-                "session_id": chat.session_id,
+                "session_id": str(chat.session_id),
                 "created_at": chat.created_at.isoformat(),
                 "last_activity": chat.last_activity.isoformat(),
                 "message_count": chat.message_count,
@@ -1668,8 +708,47 @@ async def get_chat_messages(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching chat messages: {str(e)}")
+        processing_time = (time.time() - start_time) * 1000
+        
+        logger.error(f"💥 CHAT MESSAGES REQUEST FAILED - Request ID: {request_id}, Chat: {chat_id}, User: {user_id}, Error: {type(e).__name__}: {str(e)}, Time: {round(processing_time, 2)}ms", exc_info=True)
+        
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch chat messages"
         )
+
+@router.get("/database-status")
+async def get_database_status(request: Request):
+    """
+    Get comprehensive database status and performance metrics.
+    """
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    
+    logger.info(f"🔍 DATABASE STATUS CHECK STARTED - Request ID: {request_id}")
+    
+    try:
+        # Test async database connection
+        async_status = await test_async_database_connection()
+        
+        logger.info(f"✅ DATABASE STATUS CHECK COMPLETED - Request ID: {request_id}, Status: {async_status['status']}, Connection Time: {async_status.get('connection_time_ms', 0)}ms, Performance: {async_status.get('performance_rating', 'unknown')}")
+        
+        return {
+            "async_database": async_status,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id,
+            "status": "healthy" if async_status["status"] == "connected" else "degraded"
+        }
+        
+    except Exception as e:
+        logger.error(f"💥 DATABASE STATUS CHECK FAILED - Request ID: {request_id}, Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        
+        return {
+            "async_database": {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__
+            },
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id,
+            "status": "error"
+        }

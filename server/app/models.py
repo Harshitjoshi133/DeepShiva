@@ -2,6 +2,8 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Foreign
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from app.database import Base
 
 class User(Base):
@@ -29,7 +31,7 @@ class Chat(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String(200), nullable=True)
     chat_type = Column(String(50), default="general")  # general, tourism, culture, yoga, emergency, vision
-    session_id = Column(String(36), nullable=True)  # UUID for session tracking
+    session_id = Column(UUID(as_uuid=True), default=uuid.uuid4, nullable=True)  # UUID for session tracking
     chat_metadata = Column(JSON, nullable=True)  # Store additional chat metadata
     message_count = Column(Integer, default=0)
     total_tokens = Column(Integer, default=0)  # Track AI token usage

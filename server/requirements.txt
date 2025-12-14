@@ -4,6 +4,7 @@ pydantic
 python-multipart
 sqlalchemy
 psycopg2-binary
+asyncpg
 alembic
 python-dotenv
 ollama

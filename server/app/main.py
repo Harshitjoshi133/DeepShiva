@@ -22,7 +22,7 @@ logger = get_logger("main")
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
-    logger.info("Starting Deep-Shiva API", extra={"event": "startup"})
+    logger.info("Starting Deep-Shiva API - Event: startup")
     
     # Create database tables (suppress verbose SQLAlchemy logs during startup)
     try:
@@ -37,15 +37,15 @@ async def lifespan(app: FastAPI):
         # Restore original logging level
         sqlalchemy_logger.setLevel(original_level)
         
-        logger.info("Database initialized successfully", extra={"event": "database_init"})
+        logger.info("Database initialized successfully - Event: database_init")
     except Exception as e:
-        logger.error("Failed to initialize database", extra={"error": str(e)}, exc_info=True)
+        logger.error(f"Failed to initialize database - Error: {str(e)}", exc_info=True)
         raise
     
     yield
     
     # Shutdown
-    logger.info("Shutting down Deep-Shiva API", extra={"event": "shutdown"})
+    logger.info("Shutting down Deep-Shiva API - Event: shutdown")
 
 app = FastAPI(
     title="Deep-Shiva API",
@@ -79,10 +79,8 @@ app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["Monito
 @app.get("/")
 async def root(request: Request):
     """Root endpoint with API information"""
-    logger.info("Root endpoint accessed", extra={
-        "request_id": getattr(request.state, 'request_id', 'unknown'),
-        "endpoint": "/"
-    })
+    request_id = getattr(request.state, 'request_id', 'unknown')
+    logger.info(f"Root endpoint accessed - Request ID: {request_id}, Endpoint: /")
     
     return {
         "message": "Welcome to Deep-Shiva API",
@@ -130,12 +128,10 @@ async def health_check(request: Request):
     db_status = "operational" if db_test_result["status"] == "connected" else "error"
     
     if db_status == "operational":
-        logger.debug("Database health check passed", extra={"request_id": request_id})
+        logger.debug(f"Database health check passed - Request ID: {request_id}")
     else:
-        logger.error("Database health check failed", extra={
-            "request_id": request_id,
-            "error": db_test_result.get("error", "Unknown database error")
-        })
+        error_msg = db_test_result.get("error", "Unknown database error")
+        logger.error(f"Database health check failed - Request ID: {request_id}, Error: {error_msg}")
     
     health_status = {
         "status": "healthy" if db_status == "operational" else "degraded",
@@ -160,11 +156,7 @@ async def health_check(request: Request):
         }
     }
     
-    logger.info("Health check completed", extra={
-        "request_id": request_id,
-        "status": health_status["status"],
-        "db_status": db_status
-    })
+    logger.info(f"Health check completed - Request ID: {request_id}, Status: {health_status['status']}, Database: {db_status}")
     
     return health_status
 
