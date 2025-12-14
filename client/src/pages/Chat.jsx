@@ -854,6 +854,11 @@ export default function Chat() {
                                   {message.content}
                                 </div>
                               </div>
+                              {message.timestamp && (
+                                <div className="message-timestamp user-timestamp">
+                                  {formatTime(message.timestamp)}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="message-avatar">
@@ -892,6 +897,18 @@ export default function Chat() {
                                 >
                                   {message.content}
                                 </ReactMarkdown>
+                              </div>
+                              <div className="message-meta assistant-meta">
+                                {message.timestamp && (
+                                  <span className="message-timestamp assistant-timestamp">
+                                    {formatTime(message.timestamp)}
+                                  </span>
+                                )}
+                                {message.responseTime && (
+                                  <span className="response-time-badge">
+                                    {message.responseTime}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
