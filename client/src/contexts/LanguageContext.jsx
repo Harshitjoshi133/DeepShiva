@@ -64,7 +64,8 @@ const getTranslations = () => ({
       yoga: 'Yoga',
       dashboard: 'Dashboard',
       culture: 'Culture',
-      emergency: 'SOS'
+      emergency: 'SOS',
+      meditation: 'Meditation'
     },
     
     // Common
@@ -94,6 +95,7 @@ const getTranslations = () => ({
       quickActions: 'Quick Actions',
       checkCrowd: 'Check Crowd Status',
       yogaMode: 'Yoga Mode',
+      meditationMode: 'Meditation',
       emergencyHelp: 'Emergency Help',
       whyDeepShiva: 'Why Deep-Shiva?',
       spiritualGuidance: 'Spiritual Guidance',
@@ -208,6 +210,46 @@ const getTranslations = () => ({
       firstAidDesc: 'Essential first aid information for common mountain emergencies',
       important: 'Important',
       importantNote: 'This guide is for informational purposes only. Always seek professional medical help in emergencies. Keep emergency numbers saved offline in your phone.'
+    },
+
+    // Meditation Page
+    meditation: {
+      title: 'AI-Guided Meditation',
+      subtitle: 'Find inner peace with personalized meditation guidance',
+      selectType: 'Choose Your Meditation Type',
+      selectDuration: 'Choose Duration',
+      settings: 'Settings',
+      breathingPattern: 'Breathing Pattern',
+      voiceGuidance: 'Voice Guidance',
+      voiceSpeed: 'Voice Speed',
+      voiceSelection: 'Voice Selection',
+      voiceServiceError: 'Voice Service Unavailable',
+      voiceErrorHelp: 'To use voice-guided meditation:',
+      retryVoice: 'Retry Voice Service',
+      useTextOnly: 'Use Text Only',
+      cannotStartVoiceError: 'Cannot start voice-guided meditation. Please fix voice service issues or disable voice guidance.',
+      voiceNotReady: 'Please wait for voice generation to complete before starting meditation.',
+      voiceReady: 'Voice Guidance Ready!',
+      voiceReadyDesc: 'Your personalized meditation guidance has been generated and is ready to play.',
+      generateVoice: 'Generate Voice Guidance',
+      waitingForVoice: 'Waiting for Voice...',
+      startMeditation: 'Start Meditation',
+      aiGuidance: 'AI Guidance',
+      completed: 'Meditation Complete!',
+      newSession: 'New Session',
+      repeatSession: 'Repeat Session',
+      types: {
+        mindfulness: 'Mindfulness',
+        mindfulnessDesc: 'Focus on present moment awareness',
+        lovingKindness: 'Loving Kindness',
+        lovingKindnessDesc: 'Cultivate compassion and love',
+        nature: 'Nature Connection',
+        natureDesc: 'Connect with natural elements',
+        sleep: 'Sleep Preparation',
+        sleepDesc: 'Prepare for restful sleep',
+        energy: 'Energy Boost',
+        energyDesc: 'Increase vitality and focus'
+      }
     }
   },
   
@@ -219,7 +261,8 @@ const getTranslations = () => ({
       yoga: 'योग',
       dashboard: 'डैशबोर्ड',
       culture: 'संस्कृति',
-      emergency: 'आपातकाल'
+      emergency: 'आपातकाल',
+      meditation: 'ध्यान'
     },
     
     // Common
@@ -249,6 +292,7 @@ const getTranslations = () => ({
       quickActions: 'त्वरित कार्य',
       checkCrowd: 'भीड़ की स्थिति देखें',
       yogaMode: 'योग मोड',
+      meditationMode: 'ध्यान',
       emergencyHelp: 'आपातकालीन सहायता',
       whyDeepShiva: 'दीप-शिव क्यों?',
       spiritualGuidance: 'आध्यात्मिक मार्गदर्शन',
@@ -363,6 +407,46 @@ const getTranslations = () => ({
       firstAidDesc: 'सामान्य पर्वतीय आपातकाल के लिए आवश्यक प्राथमिक चिकित्सा जानकारी',
       important: 'महत्वपूर्ण',
       importantNote: 'यह गाइड केवल सूचनात्मक उद्देश्यों के लिए है। आपातकाल में हमेशा पेशेवर चिकित्सा सहायता लें। आपातकालीन नंबरों को अपने फोन में ऑफलाइन सेव करके रखें।'
+    },
+
+    // Meditation Page
+    meditation: {
+      title: 'AI-निर्देशित ध्यान',
+      subtitle: 'व्यक्तिगत ध्यान मार्गदर्शन के साथ आंतरिक शांति पाएं',
+      selectType: 'अपना ध्यान प्रकार चुनें',
+      selectDuration: 'अवधि चुनें',
+      settings: 'सेटिंग्स',
+      breathingPattern: 'सांस लेने का पैटर्न',
+      voiceGuidance: 'आवाज़ मार्गदर्शन',
+      voiceSpeed: 'आवाज़ की गति',
+      voiceSelection: 'आवाज़ चुनें',
+      voiceServiceError: 'आवाज़ सेवा उपलब्ध नहीं',
+      voiceErrorHelp: 'आवाज़-निर्देशित ध्यान के लिए:',
+      retryVoice: 'आवाज़ सेवा पुनः प्रयास करें',
+      useTextOnly: 'केवल टेक्स्ट का उपयोग करें',
+      cannotStartVoiceError: 'आवाज़-निर्देशित ध्यान शुरू नहीं कर सकते। कृपया आवाज़ सेवा की समस्याओं को ठीक करें या आवाज़ मार्गदर्शन को अक्षम करें।',
+      voiceNotReady: 'ध्यान शुरू करने से पहले आवाज़ जेनरेशन पूरा होने का इंतज़ार करें।',
+      voiceReady: 'आवाज़ मार्गदर्शन तैयार!',
+      voiceReadyDesc: 'आपका व्यक्तिगत ध्यान मार्गदर्शन तैयार हो गया है और चलाने के लिए तैयार है।',
+      generateVoice: 'आवाज़ मार्गदर्शन जेनरेट करें',
+      waitingForVoice: 'आवाज़ का इंतज़ार...',
+      startMeditation: 'ध्यान शुरू करें',
+      aiGuidance: 'AI मार्गदर्शन',
+      completed: 'ध्यान पूर्ण!',
+      newSession: 'नया सत्र',
+      repeatSession: 'सत्र दोहराएं',
+      types: {
+        mindfulness: 'सचेतता',
+        mindfulnessDesc: 'वर्तमान क्षण की जागरूकता पर ध्यान दें',
+        lovingKindness: 'प्रेम-दया',
+        lovingKindnessDesc: 'करुणा और प्रेम विकसित करें',
+        nature: 'प्रकृति संबंध',
+        natureDesc: 'प्राकृतिक तत्वों से जुड़ें',
+        sleep: 'नींद की तैयारी',
+        sleepDesc: 'आरामदायक नींद के लिए तैयार हों',
+        energy: 'ऊर्जा बूस्ट',
+        energyDesc: 'जीवन शक्ति और फोकस बढ़ाएं'
+      }
     }
   },
   
@@ -374,7 +458,8 @@ const getTranslations = () => ({
       yoga: 'योग',
       dashboard: 'डैशबोर्ड',
       culture: 'संस्कार',
-      emergency: 'मुसीबत'
+      emergency: 'मुसीबत',
+      meditation: 'ध्यान'
     },
     
     // Common
@@ -404,6 +489,7 @@ const getTranslations = () => ({
       quickActions: 'जल्दी काम',
       checkCrowd: 'भीड़ देखो',
       yogaMode: 'योग मोड',
+      meditationMode: 'ध्यान',
       emergencyHelp: 'मुसीबत में मदद',
       whyDeepShiva: 'दीप-शिव क्यों?',
       spiritualGuidance: 'आध्यात्मिक मार्गदर्शन',
@@ -518,6 +604,46 @@ const getTranslations = () => ({
       firstAidDesc: 'पहाड़ी मुसीबतों के लिए जरूरी प्राथमिक चिकित्सा जानकारी',
       important: 'जरूरी',
       importantNote: 'यह गाइड सिर्फ जानकारी के लिए है। मुसीबत में हमेशा डॉक्टर की मदद लो। मुसीबत के नंबर अपने फोन में ऑफलाइन सेव करके रखो।'
+    },
+
+    // Meditation Page
+    meditation: {
+      title: 'AI-निर्देशित ध्यान',
+      subtitle: 'व्यक्तिगत ध्यान मार्गदर्शन के साथ मन की शांति पाओ',
+      selectType: 'अपना ध्यान प्रकार चुनो',
+      selectDuration: 'समय चुनो',
+      settings: 'सेटिंग्स',
+      breathingPattern: 'सांस का तरीका',
+      voiceGuidance: 'आवाज़ मार्गदर्शन',
+      voiceSpeed: 'आवाज़ की गति',
+      voiceSelection: 'आवाज़ चुनो',
+      voiceServiceError: 'आवाज़ सेवा उपलब्ध नहीं',
+      voiceErrorHelp: 'आवाज़-निर्देशित ध्यान के लिए:',
+      retryVoice: 'आवाज़ सेवा दोबारा कोशिश करो',
+      useTextOnly: 'सिर्फ टेक्स्ट इस्तेमाल करो',
+      cannotStartVoiceError: 'आवाज़-निर्देशित ध्यान शुरू नहीं कर सकते। आवाज़ सेवा की समस्याओं को ठीक करो या आवाज़ मार्गदर्शन बंद करो।',
+      voiceNotReady: 'ध्यान शुरू करने से पहले आवाज़ जेनरेशन पूरा होने का इंतज़ार करो।',
+      voiceReady: 'आवाज़ मार्गदर्शन तैयार!',
+      voiceReadyDesc: 'तुम्हारा व्यक्तिगत ध्यान मार्गदर्शन तैयार हो गया है और चलाने के लिए तैयार है।',
+      generateVoice: 'आवाज़ मार्गदर्शन बनाओ',
+      waitingForVoice: 'आवाज़ का इंतज़ार...',
+      startMeditation: 'ध्यान शुरू करो',
+      aiGuidance: 'AI मार्गदर्शन',
+      completed: 'ध्यान पूरा!',
+      newSession: 'नया सत्र',
+      repeatSession: 'सत्र दोहराओ',
+      types: {
+        mindfulness: 'सचेतता',
+        mindfulnessDesc: 'वर्तमान क्षण की जागरूकता पर ध्यान दो',
+        lovingKindness: 'प्रेम-दया',
+        lovingKindnessDesc: 'करुणा और प्रेम बढ़ाओ',
+        nature: 'प्रकृति संबंध',
+        natureDesc: 'प्राकृतिक तत्वों से जुड़ो',
+        sleep: 'नींद की तैयारी',
+        sleepDesc: 'आरामदायक नींद के लिए तैयार हो',
+        energy: 'ऊर्जा बूस्ट',
+        energyDesc: 'जीवन शक्ति और फोकस बढ़ाओ'
+      }
     }
   }
 })

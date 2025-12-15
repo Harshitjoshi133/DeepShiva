@@ -1281,3 +1281,115 @@ body {
 .message-bubble:hover .response-time-badge {
   background: rgba(255, 153, 51, 0.15);
 }
+
+/* Audio Player Styles */
+.slider {
+  background: linear-gradient(to right, #3b82f6 0%, #8b5cf6 100%);
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Meditation Audio Player Enhancements */
+.meditation-audio-player {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+}
+
+.audio-progress-bar {
+  background: linear-gradient(90deg, #e5e7eb 0%, #e5e7eb 100%);
+  transition: all 0.3s ease;
+}
+
+.audio-progress-bar:hover {
+  background: linear-gradient(90deg, #d1d5db 0%, #d1d5db 100%);
+}
+/* Voice Generation Loader Animations */
+.voice-loader-pulse {
+  animation: voice-pulse 2s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.voice-loader-wave {
+  animation: voice-wave 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-wave {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.voice-loader-spin {
+  animation: voice-spin 2s linear infinite;
+}
+
+@keyframes voice-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Voice Generation Progress Bar */
+.voice-progress-bar {
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
+  background-size: 200% 100%;
+  animation: voice-progress 3s ease-in-out infinite;
+}
+
+@keyframes voice-progress {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Meditation Timer Glow Effect */
+.meditation-timer-glow {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  animation: timer-glow 3s ease-in-out infinite alternate;
+}
+
+@keyframes timer-glow {
+  from {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  to {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
+  }
+}

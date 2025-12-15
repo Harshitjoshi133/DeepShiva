@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routers import chat, vision, tourism, culture, database, monitoring, yoga
+from app.routers import chat, vision, tourism, culture, database, monitoring, yoga, meditation
 from app.database import engine
 from app.models import Base
 from app.logging_config import setup_logging, get_logger
@@ -72,6 +72,7 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(vision.router, prefix="/api/v1/vision", tags=["Vision"])
 app.include_router(yoga.router, prefix="/api/v1/yoga", tags=["Yoga"])
+app.include_router(meditation.router, prefix="/api/v1", tags=["Meditation"])
 app.include_router(tourism.router, prefix="/api/v1/tourism", tags=["Tourism"])
 app.include_router(culture.router, prefix="/api/v1/culture", tags=["Culture"])
 app.include_router(database.router, prefix="/api/v1/database", tags=["Database"])
@@ -90,6 +91,7 @@ async def root(request: Request):
         "features": [
             "Enhanced Chat with Context Awareness",
             "Advanced Yoga Pose Analysis", 
+            "AI-Guided Meditation Sessions",
             "Comprehensive Tourism Information",
             "Cultural Heritage & Artisan Support",
             "Real-time Weather & Crowd Data",
@@ -101,6 +103,7 @@ async def root(request: Request):
             "chat": "/api/v1/chat/",
             "vision": "/api/v1/vision/",
             "yoga": "/api/v1/yoga/",
+            "meditation": "/api/v1/meditation/",
             "tourism": "/api/v1/tourism/",
             "culture": "/api/v1/culture/",
             "database": "/api/v1/database/",
@@ -143,6 +146,7 @@ async def health_check(request: Request):
             "chat": "operational",
             "vision": "operational",
             "yoga": "operational",
+            "meditation": "operational",
             "tourism": "operational",
             "culture": "operational",
             "database": db_status

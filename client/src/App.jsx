@@ -7,6 +7,7 @@ import YogaSentinel from './pages/YogaSentinel'
 import Dashboard from './pages/Dashboard'
 import Culture from './pages/Culture'
 import Emergency from './pages/Emergency'
+import Meditation from './pages/Meditation'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/culture" element={<Culture />} />
             <Route path="/emergency" element={<Emergency />} />
+            <Route path="/meditation" element={<Meditation />} />
           </Routes>
         </Layout>
       </Router>

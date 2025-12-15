@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Home, MessageCircle, Activity, BarChart3, Palette, AlertCircle, Menu, X, Globe } from 'lucide-react'
+import { Home, MessageCircle, Activity, BarChart3, Palette, AlertCircle, Menu, X, Globe, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -13,6 +13,7 @@ export default function Layout({ children }) {
     { path: '/', icon: Home, label: t('nav.home', 'Home') },
     { path: '/chat', icon: MessageCircle, label: t('nav.chat', 'Chat') },
     { path: '/yoga-sentinel', icon: Activity, label: t('nav.yoga', 'Yoga') },
+    { path: '/meditation', icon: Brain, label: t('nav.meditation', 'Meditation') },
     { path: '/dashboard', icon: BarChart3, label: t('nav.dashboard', 'Dashboard') },
     { path: '/culture', icon: Palette, label: t('nav.culture', 'Culture') },
     { path: '/emergency', icon: AlertCircle, label: t('nav.emergency', 'SOS') },
@@ -140,7 +141,7 @@ export default function Layout({ children }) {
       {/* Mobile Bottom Navigation */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 glass-nav border-t border-white/20 z-40">
         <div className="flex justify-around items-center py-2">
-          {navItems.slice(0, 5).map((item) => {
+          {navItems.filter(item => ['/', '/chat', '/yoga-sentinel', '/meditation', '/emergency'].includes(item.path)).map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.path
             return (

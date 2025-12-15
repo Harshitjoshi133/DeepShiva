@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Users, Activity, AlertCircle, Mountain, Sparkles, Heart, Palette, Leaf, Globe } from 'lucide-react'
+import { Users, Activity, AlertCircle, Mountain, Sparkles, Heart, Palette, Leaf, Globe, Brain } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -9,6 +9,7 @@ export default function Home() {
   const quickActions = [
     { icon: Users, label: t('home.checkCrowd', 'Check Crowd Status'), path: '/dashboard', color: 'bg-blue-500' },
     { icon: Activity, label: t('home.yogaMode', 'Yoga Mode'), path: '/yoga-sentinel', color: 'bg-green-500' },
+    { icon: Brain, label: t('home.meditationMode', 'Meditation'), path: '/meditation', color: 'bg-purple-500' },
     { icon: AlertCircle, label: t('home.emergencyHelp', 'Emergency Help'), path: '/emergency', color: 'bg-red-500' },
   ]
 
@@ -53,7 +54,7 @@ export default function Home() {
       {/* Quick Actions */}
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-800 mb-3 text-center">{t('home.quickActions', 'Quick Actions')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {quickActions.map((action, index) => {
             const Icon = action.icon
             return (
