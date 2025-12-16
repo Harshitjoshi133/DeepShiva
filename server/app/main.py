@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routers import chat, vision, tourism, culture, database, monitoring, yoga, meditation
+from app.routers import chat, vision, tourism, culture, database, monitoring, yoga, meditation, mappls
 from app.database import engine
 from app.models import Base
 from app.logging_config import setup_logging, get_logger
@@ -77,6 +77,7 @@ app.include_router(tourism.router, prefix="/api/v1/tourism", tags=["Tourism"])
 app.include_router(culture.router, prefix="/api/v1/culture", tags=["Culture"])
 app.include_router(database.router, prefix="/api/v1/database", tags=["Database"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["Monitoring"])
+app.include_router(mappls.router, prefix="/api/v1/mappls", tags=["Mappls"])
 
 @app.get("/")
 async def root(request: Request):
@@ -108,6 +109,7 @@ async def root(request: Request):
             "culture": "/api/v1/culture/",
             "database": "/api/v1/database/",
             "monitoring": "/api/v1/monitoring/",
+            "mappls": "/api/v1/mappls/",
             "docs": "/docs"
         },
         "logging": {

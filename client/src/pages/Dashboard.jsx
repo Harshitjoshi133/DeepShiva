@@ -1,21 +1,13 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { TrendingUp, Leaf, Car, Lightbulb } from 'lucide-react'
+import { Leaf, Car, Lightbulb } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
+import CharDhamMap from '../components/CharDhamMap'
 
 export default function Dashboard() {
   const { t } = useLanguage()
-  const [crowdData, setCrowdData] = useState([])
   const [carbonForm, setCarbonForm] = useState({ distance: '', vehicle: 'car' })
   const [carbonResult, setCarbonResult] = useState(null)
-
-  useEffect(() => {
-    fetch('/api/v1/tourism/crowd-status')
-      .then(res => res.json())
-      .then(data => setCrowdData(data))
-      .catch(err => console.error(err))
-  }, [])
 
   const handleCarbonSubmit = async (e) => {
     e.preventDefault()
@@ -35,67 +27,12 @@ export default function Dashboard() {
     }
   }
 
-  const getBarColor = (level) => {
-    if (level < 40) return '#228B22'
-    if (level < 70) return '#FFA500'
-    return '#FF4444'
-  }
-
   return (
     <div className="max-w-5xl mx-auto space-y-3">
       <h2 className="text-xl font-bold text-gray-800">{t('dashboard.title', 'Yatra Dashboard')}</h2>
 
-      {/* Crowd Meter */}
-      <div className="glass-card shadow-2xl">
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp size={20} className="text-saffron" />
-          <h3 className="text-lg font-bold gradient-text">{t('dashboard.crowdStatus', 'Live Crowd Status')}</h3>
-        </div>
-        
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={crowdData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="shrine" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="crowd_level" radius={[8, 8, 0, 0]}>
-              {crowdData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.crowd_level)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-          {crowdData.map((shrine) => {
-            const shrineImages = {
-              'Kedarnath': '/images/shrines/kedarnath.png',
-              'Badrinath': '/images/shrines/badrinath.png', 
-              'Gangotri': '/images/shrines/gangotri.png',
-              'Yamunotri': '/images/shrines/yamontri.png'
-            }
-            return (
-              <div key={shrine.shrine} className="relative text-center p-2 bg-gray-50 rounded-lg overflow-hidden">
-                <img 
-                  src={shrineImages[shrine.shrine]}
-                  alt={shrine.shrine}
-                  className="absolute inset-0 w-full h-full object-cover opacity-20"
-                />
-                <div className="relative z-10">
-                  <p className="font-semibold text-gray-800 text-xs">{shrine.shrine}</p>
-                  <p className={`text-xs font-bold ${
-                    shrine.status === 'Light' ? 'text-green-600' :
-                    shrine.status === 'Moderate' ? 'text-orange-600' :
-                    'text-red-600'
-                  }`}>
-                    {shrine.status}
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* Char Dham Route Map */}
+      <CharDhamMap />
 
       {/* Carbon Calculator */}
       <div className="glass-card shadow-2xl">

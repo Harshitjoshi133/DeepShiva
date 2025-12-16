@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Home, MessageCircle, Activity, BarChart3, Palette, AlertCircle, Menu, X, Globe, Brain } from 'lucide-react'
+import { Home, MessageCircle, Activity, BarChart3, AlertCircle, Menu, X, Globe, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -15,7 +15,6 @@ export default function Layout({ children }) {
     { path: '/yoga-sentinel', icon: Activity, label: t('nav.yoga', 'Yoga') },
     { path: '/meditation', icon: Brain, label: t('nav.meditation', 'Meditation') },
     { path: '/dashboard', icon: BarChart3, label: t('nav.dashboard', 'Dashboard') },
-    { path: '/culture', icon: Palette, label: t('nav.culture', 'Culture') },
     { path: '/emergency', icon: AlertCircle, label: t('nav.emergency', 'SOS') },
   ]
 
